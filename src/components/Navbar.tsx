@@ -1,6 +1,6 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Flame, LogOut } from "lucide-react";
-import { currentUser } from "@/data/mockData";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navLinks = [
   { label: "Dashboard", path: "/" },
@@ -15,6 +15,13 @@ const navLinks = [
 
 export default function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
@@ -42,14 +49,14 @@ export default function Navbar() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1 rounded-full bg-gold/10 px-3 py-1">
             <Flame className="h-4 w-4 text-gold" />
-            <span className="text-sm font-bold text-gold">{currentUser.streak}</span>
+            <span className="text-sm font-bold text-gold">{user?.currentStreak ?? 0}</span>
           </div>
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-            {currentUser.avatar}
+            {user?.avatar ?? "?"}
           </div>
-          <Link to="/login" className="text-muted-foreground hover:text-destructive transition-colors">
+          <button onClick={handleLogout} className="text-muted-foreground hover:text-destructive transition-colors" title="Logout">
             <LogOut className="h-4 w-4" />
-          </Link>
+          </button>
         </div>
       </div>
     </nav>
