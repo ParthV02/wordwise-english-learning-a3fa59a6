@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { BookOpen, Mic, BarChart3, Calendar, ArrowRight, Play, Star, Newspaper, Trophy, FolderOpen, Puzzle, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { wordOfTheDay, modules } from "@/data/mockData";
+import { speak } from "@/lib/tts";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
