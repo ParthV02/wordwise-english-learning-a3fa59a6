@@ -80,7 +80,7 @@ export default function DashboardPage() {
           <div className="space-y-3">
             <h2 className="text-3xl font-bold text-heading">{wordOfTheDay.word}</h2>
             <p className="text-muted-foreground font-mono">{wordOfTheDay.ipa}</p>
-            <Button size="sm" variant="outline" className="gap-2 border-primary text-primary hover:bg-primary/5">
+            <Button size="sm" variant="outline" onClick={() => speak(wordOfTheDay.word)} className="gap-2 border-primary text-primary hover:bg-primary/5">
               <Play className="h-4 w-4" /> Listen
             </Button>
             <div className="flex flex-wrap gap-2 pt-2">
