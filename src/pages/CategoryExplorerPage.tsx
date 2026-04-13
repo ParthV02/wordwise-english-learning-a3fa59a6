@@ -3,6 +3,7 @@ import { Stethoscope, Scale, FlaskConical, Briefcase, GraduationCap, BookOpen, A
 import { Button } from "@/components/ui/button";
 import { categories, categoryWords } from "@/data/mockData";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 const iconMap: Record<string, React.ElementType> = {
   Stethoscope, Scale, FlaskConical, Briefcase, GraduationCap, BookOpen,
@@ -12,6 +13,7 @@ const suffixFilters = ["-ology", "-itis", "-tion", "-ment", "-ance", "-est", "-i
 const prefixFilters = ["bio-", "pre-", "anti-", "micro-", "inter-", "un-", "re-", "over-", "sub-"];
 
 export default function CategoryExplorerPage() {
+  const { user, updateUser } = useAuth();
   const [selectedCat, setSelectedCat] = useState("medical");
   const [activeSuffixes, setActiveSuffixes] = useState<Set<string>>(new Set());
   const [activePrefixes, setActivePrefixes] = useState<Set<string>>(new Set());
@@ -31,8 +33,18 @@ export default function CategoryExplorerPage() {
     return true;
   });
   const displayWords = activeSuffixes.size === 0 && activePrefixes.size === 0 ? words : filtered;
-
   const cat = categories.find((c) => c.id === selectedCat)!;
+
+  const handleLearn = (word: string) => {
+    if (!user) return;
+    const already = user.wordBank.some((w: any) => w.word === word);
+    if (already) { toast.info(`"${word}" is already in your Word Bank`); return; }
+    updateUser({
+      wordBank: [...user.wordBank, { word, added: new Date().toISOString().split("T")[0] }],
+      wordsLearned: user.wordsLearned + 1,
+    });
+    toast.success(`"${word}" saved to Word Bank!`);
+  };
 
   return (
     <div className="container py-8 space-y-8">
@@ -42,26 +54,18 @@ export default function CategoryExplorerPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[280px_1fr]">
-        {/* Left Panel */}
         <div className="space-y-2">
           <h3 className="text-sm font-bold text-heading mb-3">Choose Category</h3>
           {categories.map((c) => {
             const Icon = iconMap[c.icon] || BookOpen;
             const active = selectedCat === c.id;
             return (
-              <button
-                key={c.id}
-                onClick={() => { setSelectedCat(c.id); setActiveSuffixes(new Set()); setActivePrefixes(new Set()); }}
+              <button key={c.id} onClick={() => { setSelectedCat(c.id); setActiveSuffixes(new Set()); setActivePrefixes(new Set()); }}
                 className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition-all ${
-                  active
-                    ? c.color === "green"
-                      ? "bg-success text-success-foreground"
-                      : "bg-primary text-primary-foreground"
-                    : c.color === "green"
-                      ? "bg-green-card-bg text-success border border-green-card-border hover:bg-green-card-bg/80"
-                      : "bg-blue-card-bg text-primary border border-blue-card-border hover:bg-blue-card-bg/80"
-                }`}
-              >
+                  active ? (c.color === "green" ? "bg-success text-success-foreground" : "bg-primary text-primary-foreground")
+                    : (c.color === "green" ? "bg-green-card-bg text-success border border-green-card-border hover:bg-green-card-bg/80"
+                      : "bg-blue-card-bg text-primary border border-blue-card-border hover:bg-blue-card-bg/80")
+                }`}>
                 <Icon className="h-5 w-5" />
                 <div>
                   <p className="font-semibold text-sm">{c.name}</p>
@@ -72,72 +76,44 @@ export default function CategoryExplorerPage() {
           })}
         </div>
 
-        {/* Right Panel */}
         <div className="space-y-6">
-          {/* Suffix Filters */}
           <div>
             <p className="text-sm font-semibold text-heading mb-2">Filter by Suffix</p>
             <div className="flex flex-wrap gap-2">
               {suffixFilters.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => toggleFilter(activeSuffixes, s, setActiveSuffixes)}
+                <button key={s} onClick={() => toggleFilter(activeSuffixes, s, setActiveSuffixes)}
                   className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    activeSuffixes.has(s)
-                      ? "bg-success text-success-foreground"
-                      : "bg-green-card-bg text-success border border-green-card-border hover:bg-green-card-bg/80"
-                  }`}
-                >
-                  {s}
-                </button>
+                    activeSuffixes.has(s) ? "bg-success text-success-foreground" : "bg-green-card-bg text-success border border-green-card-border hover:bg-green-card-bg/80"
+                  }`}>{s}</button>
               ))}
             </div>
           </div>
-
-          {/* Prefix Filters */}
           <div>
             <p className="text-sm font-semibold text-heading mb-2">Filter by Prefix</p>
             <div className="flex flex-wrap gap-2">
               {prefixFilters.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => toggleFilter(activePrefixes, p, setActivePrefixes)}
+                <button key={p} onClick={() => toggleFilter(activePrefixes, p, setActivePrefixes)}
                   className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    activePrefixes.has(p)
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-blue-card-bg text-primary border border-blue-card-border hover:bg-blue-card-bg/80"
-                  }`}
-                >
-                  {p}
-                </button>
+                    activePrefixes.has(p) ? "bg-primary text-primary-foreground" : "bg-blue-card-bg text-primary border border-blue-card-border hover:bg-blue-card-bg/80"
+                  }`}>{p}</button>
               ))}
             </div>
           </div>
 
-          <p className="text-sm text-muted-foreground">
-            Showing {displayWords.length} words in <strong className="text-heading">{cat.name}</strong>
-          </p>
+          <p className="text-sm text-muted-foreground">Showing {displayWords.length} words in <strong className="text-heading">{cat.name}</strong></p>
 
-          {/* Word Cards */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {displayWords.map((w) => (
               <div key={w.word} className="rounded-xl border-l-4 border-l-green-card-border bg-card p-4 shadow-sm">
                 <h4 className="font-bold text-heading">{w.word}</h4>
                 <div className="mt-2 flex flex-wrap gap-1">
-                  {w.prefix && (
-                    <span className="rounded-full bg-blue-card-bg px-2 py-0.5 text-xs text-primary border border-blue-card-border">{w.prefix}</span>
-                  )}
+                  {w.prefix && <span className="rounded-full bg-blue-card-bg px-2 py-0.5 text-xs text-primary border border-blue-card-border">{w.prefix}</span>}
                   <span className="rounded-full bg-green-card-bg px-2 py-0.5 text-xs text-success border border-green-card-border">{w.root}</span>
-                  {w.suffix && (
-                    <span className="rounded-full bg-blue-card-bg px-2 py-0.5 text-xs text-primary border border-blue-card-border">{w.suffix}</span>
-                  )}
+                  {w.suffix && <span className="rounded-full bg-blue-card-bg px-2 py-0.5 text-xs text-primary border border-blue-card-border">{w.suffix}</span>}
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">{w.definition}</p>
-                <Button
-                  size="sm"
-                  onClick={() => toast.success(`"${w.word}" saved to Word Bank!`)}
-                  className="mt-3 gap-1 bg-success text-success-foreground hover:bg-success/90 text-xs"
-                >
+                <Button size="sm" onClick={() => handleLearn(w.word)}
+                  className="mt-3 gap-1 bg-success text-success-foreground hover:bg-success/90 text-xs">
                   Learn <ArrowRight className="h-3 w-3" />
                 </Button>
               </div>

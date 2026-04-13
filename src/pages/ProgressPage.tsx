@@ -1,18 +1,47 @@
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Search } from "lucide-react";
+import { Search, BookOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { progressData } from "@/data/mockData";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 const BLUE = "#1A56DB";
 const GREEN = "#0E9F6E";
 
 export default function ProgressPage() {
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
 
-  const filteredBank = progressData.wordBank.filter((w) =>
-    w.word.toLowerCase().includes(search.toLowerCase()) ||
-    w.category.toLowerCase().includes(search.toLowerCase())
+  const hasData = user && (user.wordsLearned > 0 || user.wordBank.length > 0 || user.quizHistory.length > 0);
+
+  if (!hasData) {
+    return (
+      <div className="container py-16 text-center space-y-4 fade-in">
+        <BookOpen className="mx-auto h-16 w-16 text-primary/30" />
+        <h2 className="text-xl font-bold text-heading">No data yet!</h2>
+        <p className="text-muted-foreground">Start learning to see your progress here.</p>
+        <Link to="/">
+          <Button className="mt-2 bg-primary text-primary-foreground hover:bg-primary/90">Start Learning</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  const weeklyVocab = [
+    { week: "Week 1", words: 0 }, { week: "Week 2", words: 0 },
+    { week: "Week 3", words: 0 }, { week: "Week 4", words: user.wordsLearned },
+  ];
+  const quizScores = user.quizHistory.length > 0
+    ? user.quizHistory.slice(-4).map((s: number, i: number) => ({ week: `Quiz ${i + 1}`, score: s }))
+    : [{ week: "Week 1", score: user.weeklyQuizScore }];
+  const pronunciationData = [
+    { name: "Correct", value: user.pronunciationAccuracy || 0 },
+    { name: "Needs Work", value: 100 - (user.pronunciationAccuracy || 0) },
+  ];
+
+  const filteredBank = (user.wordBank || []).filter((w: any) =>
+    w.word?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -22,13 +51,11 @@ export default function ProgressPage() {
         <p className="text-muted-foreground mt-1">Track your learning journey</p>
       </div>
 
-      {/* Charts Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Vocabulary Growth */}
         <div className="rounded-xl bg-card p-6 shadow-sm border border-border">
-          <h3 className="mb-4 font-bold text-heading">4-Week Vocabulary Growth</h3>
+          <h3 className="mb-4 font-bold text-heading">Vocabulary Growth</h3>
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={progressData.weeklyVocab}>
+            <LineChart data={weeklyVocab}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
               <XAxis dataKey="week" tick={{ fontSize: 12 }} stroke="#94A3B8" />
               <YAxis tick={{ fontSize: 12 }} stroke="#94A3B8" />
@@ -38,11 +65,10 @@ export default function ProgressPage() {
           </ResponsiveContainer>
         </div>
 
-        {/* Quiz Scores */}
         <div className="rounded-xl bg-card p-6 shadow-sm border border-border">
-          <h3 className="mb-4 font-bold text-heading">Weekly Quiz Scores</h3>
+          <h3 className="mb-4 font-bold text-heading">Quiz Scores</h3>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={progressData.quizScores}>
+            <BarChart data={quizScores}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
               <XAxis dataKey="week" tick={{ fontSize: 12 }} stroke="#94A3B8" />
               <YAxis tick={{ fontSize: 12 }} stroke="#94A3B8" />
@@ -52,12 +78,11 @@ export default function ProgressPage() {
           </ResponsiveContainer>
         </div>
 
-        {/* Pronunciation Accuracy */}
         <div className="rounded-xl bg-card p-6 shadow-sm border border-border">
           <h3 className="mb-4 font-bold text-heading">Pronunciation Accuracy</h3>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
-              <Pie data={progressData.pronunciationData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value" strokeWidth={0}>
+              <Pie data={pronunciationData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value" strokeWidth={0}>
                 <Cell fill={BLUE} />
                 <Cell fill={GREEN} />
               </Pie>
@@ -69,85 +94,37 @@ export default function ProgressPage() {
             <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-success inline-block" /> Needs Work</span>
           </div>
         </div>
+      </div>
 
-        {/* Streak Heatmap */}
+      {user.wordBank.length > 0 && (
         <div className="rounded-xl bg-card p-6 shadow-sm border border-border">
-          <h3 className="mb-4 font-bold text-heading">28-Day Activity</h3>
-          <div className="grid grid-cols-7 gap-1.5">
-            {progressData.streakData.map((d) => (
-              <div
-                key={d.day}
-                className="aspect-square rounded-md transition-colors"
-                style={{
-                  backgroundColor: d.count === 0
-                    ? "#F1F5F9"
-                    : `rgba(14, 159, 110, ${0.2 + d.count * 0.2})`,
-                }}
-                title={`Day ${d.day}: ${d.count} activities`}
-              />
-            ))}
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="font-bold text-heading">Word Bank</h3>
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder="Search words..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 focus-visible:ring-primary" />
+            </div>
           </div>
-          <div className="mt-3 flex items-center justify-end gap-1 text-xs text-muted-foreground">
-            <span>Less</span>
-            {[0, 1, 2, 3, 4].map((l) => (
-              <div
-                key={l}
-                className="h-3 w-3 rounded-sm"
-                style={{ backgroundColor: l === 0 ? "#F1F5F9" : `rgba(14, 159, 110, ${0.2 + l * 0.2})` }}
-              />
-            ))}
-            <span>More</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Word Bank Table */}
-      <div className="rounded-xl bg-card p-6 shadow-sm border border-border">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-bold text-heading">Word Bank</h3>
-          <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search words..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 focus-visible:ring-primary"
-            />
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="pb-3 text-left font-semibold text-primary">Word</th>
-                <th className="pb-3 text-left font-semibold text-primary">Category</th>
-                <th className="pb-3 text-left font-semibold text-primary">Added</th>
-                <th className="pb-3 text-left font-semibold text-primary">Mastery</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredBank.map((w) => (
-                <tr key={w.word} className="border-b border-border/50 last:border-0">
-                  <td className="py-3 font-medium text-heading">{w.word}</td>
-                  <td className="py-3 text-muted-foreground">{w.category}</td>
-                  <td className="py-3 text-muted-foreground">{w.added}</td>
-                  <td className="py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-20 rounded-full bg-muted">
-                        <div
-                          className="h-2 rounded-full bg-success transition-all"
-                          style={{ width: `${w.mastery}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-muted-foreground">{w.mastery}%</span>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="pb-3 text-left font-semibold text-primary">Word</th>
+                  <th className="pb-3 text-left font-semibold text-primary">Added</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredBank.map((w: any, i: number) => (
+                  <tr key={i} className="border-b border-border/50 last:border-0">
+                    <td className="py-3 font-medium text-heading">{w.word}</td>
+                    <td className="py-3 text-muted-foreground">{w.added || "--"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
