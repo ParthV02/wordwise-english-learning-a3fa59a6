@@ -3,6 +3,7 @@ import { Mic, Volume2, RotateCcw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { pronunciationWords } from "@/data/mockData";
 import { toast } from "sonner";
+import { speak } from "@/lib/tts";
 
 export default function PronunciationPage() {
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -100,7 +101,7 @@ export default function PronunciationPage() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap justify-center gap-3 pt-4">
-          <Button variant="outline" className="gap-2 border-primary text-primary hover:bg-primary/5">
+          <Button variant="outline" onClick={() => speak(word.word)} className="gap-2 border-primary text-primary hover:bg-primary/5">
             <Volume2 className="h-4 w-4" /> Hear Correct Pronunciation
           </Button>
           {hasResult && (

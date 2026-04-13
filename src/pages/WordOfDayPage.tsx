@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Play, Star, CheckCircle2 } from "lucide-react";
+import { Play, Star, CheckCircle2, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { wordOfTheDay, wordHistory } from "@/data/mockData";
 import { toast } from "sonner";
+import { speak } from "@/lib/tts";
 
 export default function WordOfDayPage() {
   const [reviewed, setReviewed] = useState(false);
@@ -50,7 +51,7 @@ export default function WordOfDayPage() {
         <p className="mt-2 font-mono text-lg text-muted-foreground">{wordOfTheDay.ipa}</p>
         <span className="mt-1 inline-block text-sm italic text-muted-foreground">{wordOfTheDay.partOfSpeech}</span>
 
-        <Button size="sm" variant="outline" className="mt-4 gap-2 border-primary text-primary hover:bg-primary/5">
+        <Button size="sm" variant="outline" onClick={() => speak(wordOfTheDay.word)} className="mt-4 gap-2 border-primary text-primary hover:bg-primary/5">
           <Play className="h-4 w-4" /> Listen
         </Button>
 
@@ -105,9 +106,14 @@ export default function WordOfDayPage() {
         <div className="space-y-2">
           {wordHistory.map((w) => (
             <div key={w.date} className="flex items-center justify-between rounded-xl border-l-4 border-l-green-card-border bg-card p-4 shadow-sm">
-              <div>
-                <p className="font-semibold text-heading">{w.word}</p>
-                <p className="text-sm text-muted-foreground font-mono">{w.ipa}</p>
+              <div className="flex items-center gap-3">
+                <button onClick={() => speak(w.word)} className="text-primary hover:text-primary/70 transition-colors" title="Listen">
+                  <Volume2 className="h-4 w-4" />
+                </button>
+                <div>
+                  <p className="font-semibold text-heading">{w.word}</p>
+                  <p className="text-sm text-muted-foreground font-mono">{w.ipa}</p>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-xs text-muted-foreground">{w.date}</span>
