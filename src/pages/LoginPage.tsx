@@ -43,6 +43,11 @@ export default function LoginPage() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="focus-visible:ring-primary" />
             </div>
+            <div className="text-right">
+              <Link to="/forgot-password" className="text-sm font-medium text-primary hover:underline">
+                Forgot password?
+              </Link>
+            </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full rounded-lg bg-primary text-primary-foreground hover:bg-primary/90">Sign In</Button>
           </form>
