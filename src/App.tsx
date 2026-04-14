@@ -10,7 +10,6 @@ import Layout from "./components/Layout";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
-import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import PronunciationPage from "./pages/PronunciationPage";
 import DecomposerPage from "./pages/DecomposerPage";
 import NewsReaderPage from "./pages/NewsReaderPage";
