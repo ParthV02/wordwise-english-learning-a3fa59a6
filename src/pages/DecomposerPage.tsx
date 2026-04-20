@@ -4,14 +4,39 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { decomposerResults } from "@/data/mockData";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 type DecomposerKey = keyof typeof decomposerResults;
 
 const recentWords: DecomposerKey[] = ["unbelievable", "international", "predetermined"];
 
 export default function DecomposerPage() {
+  const { user, updateUser } = useAuth();
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<(typeof decomposerResults)[DecomposerKey] | null>(null);
+
+  const handleSaveWord = () => {
+    if (!user || !result) return;
+    const word = result.word;
+    const wordBank = user.wordBank || [];
+    const already = wordBank.some((w: any) => 
+      (typeof w === "string" ? w : w.word).toLowerCase() === word.toLowerCase()
+    );
+
+    if (!already) {
+      updateUser({
+        wordBank: [...wordBank, { 
+          word, 
+          added: new Date().toISOString().split("T")[0],
+          mastery: 0
+        }],
+        wordsLearned: user.wordsLearned + 1
+      });
+      toast.success(`"${word}" saved to Word Bank!`);
+    } else {
+      toast.info(`"${word}" is already in your Word Bank`);
+    }
+  };
 
   const handleSearch = (word?: string) => {
     const key = (word || query).toLowerCase().trim() as DecomposerKey;
@@ -102,7 +127,7 @@ export default function DecomposerPage() {
           </div>
 
           <div className="text-center">
-            <Button onClick={() => toast.success("Word saved to bank!")} className="gap-2 bg-success text-success-foreground hover:bg-success/90">
+            <Button onClick={handleSaveWord} className="gap-2 bg-success text-success-foreground hover:bg-success/90">
               <Save className="h-4 w-4" /> Save to Word Bank
             </Button>
           </div>

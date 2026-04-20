@@ -10,6 +10,8 @@ import Layout from "./components/Layout";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import AuthCallbackPage from "./pages/AuthCallbackPage";
 import PronunciationPage from "./pages/PronunciationPage";
 import DecomposerPage from "./pages/DecomposerPage";
 import NewsReaderPage from "./pages/NewsReaderPage";
@@ -32,10 +34,12 @@ const App = () => {
         <Sonner />
         {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
         <AuthProvider>
-          <BrowserRouter>
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/pronunciation" element={<PronunciationPage />} />

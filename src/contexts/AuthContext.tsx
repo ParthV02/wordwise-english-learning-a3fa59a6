@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 export interface UserData {
   name: string;
@@ -24,6 +25,8 @@ interface AuthContextType {
   token: string | null;
   login: (email: string, password: string) => string | null;
   register: (name: string, email: string, password: string) => string | null;
+  loginWithGoogle: () => Promise<string | null>;
+  completeGoogleSignIn: () => Promise<string | null>;
   requestPasswordReset: (email: string) => { error: string | null; code: string | null };
   verifyPasswordResetCode: (email: string, code: string) => string | null;
   resetPassword: (email: string, newPassword: string) => string | null;
@@ -69,6 +72,11 @@ function saveAllPasswordResetRequests(requests: PasswordResetRequest[]) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const getAppBaseUrl = () => {
+    const configured = import.meta.env.VITE_APP_URL as string | undefined;
+    return configured?.trim() || window.location.origin;
+  };
+
   const [user, setUser] = useState<UserData | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
@@ -85,6 +93,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
   }, []);
+
+  const applyAuthState = (authUser: UserData, authToken: string) => {
+    localStorage.setItem("wordwise_token", authToken);
+    localStorage.setItem("wordwise_user", JSON.stringify(authUser));
+    setToken(authToken);
+    setUser(authUser);
+  };
 
   const login = (email: string, password: string): string | null => {
     const users = getAllUsers();
@@ -125,6 +140,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("wordwise_user", JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
+    return null;
+  };
+
+  const loginWithGoogle = async (): Promise<string | null> => {
+    if (!isSupabaseConfigured || !supabase) {
+      return "Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.";
+    }
+
+    const redirectTo = `${getAppBaseUrl()}/auth/callback`;
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo,
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error) {
+      if (error.message.includes("requested path is invalid")) {
+        return `OAuth redirect is invalid. Add ${redirectTo} in Supabase Authentication URL Configuration.`;
+      }
+      return error.message;
+    }
+    if (!data?.url) return "Could not start Google sign-in. Please try again.";
+    window.location.assign(data.url);
+    return null;
+  };
+
+  const completeGoogleSignIn = async (): Promise<string | null> => {
+    if (!isSupabaseConfigured || !supabase) {
+      return "Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.";
+    }
+
+    const { data, error } = await supabase.auth.getSession();
+    if (error) return error.message;
+    if (!data.session?.user) return "Google sign-in session not found. Try again.";
+
+    const sessionUser = data.session.user;
+    const email = sessionUser.email || "";
+    if (!email) return "Google account email is missing.";
+
+    const users = getAllUsers();
+    let existing = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+
+    if (!existing) {
+      const displayName =
+        (sessionUser.user_metadata?.full_name as string | undefined) ||
+        (sessionUser.user_metadata?.name as string | undefined) ||
+        email.split("@")[0];
+
+      existing = {
+        name: displayName,
+        email,
+        password: "",
+        avatar: displayName.charAt(0).toUpperCase(),
+        wordsLearned: 0,
+        pronunciationAccuracy: 0,
+        weeklyQuizScore: 0,
+        wordsDueToday: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        wordBank: [],
+        quizHistory: [],
+        pronunciationLogs: [],
+        newsHistory: [],
+        joinDate: new Date().toISOString().split("T")[0],
+        cefr: "A2",
+      };
+      users.push(existing);
+      saveAllUsers(users);
+    }
+
+    applyAuthState(existing, data.session.access_token);
     return null;
   };
 
@@ -203,6 +290,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token,
         login,
         register,
+        loginWithGoogle,
+        completeGoogleSignIn,
         requestPasswordReset,
         verifyPasswordResetCode,
         resetPassword,

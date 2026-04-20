@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,13 @@ import { BookOpen, Mic } from "lucide-react";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const { register, token } = useAuth();
+  const { register, loginWithGoogle, token } = useAuth();
   const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  if (token) { navigate("/", { replace: true }); return null; }
+  useEffect(() => {
+    if (token) navigate("/", { replace: true });
+  }, [token, navigate]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,6 +43,11 @@ export default function RegisterPage() {
       {errors[id] && <p className="text-xs text-destructive">{errors[id]}</p>}
     </div>
   );
+
+  const handleGoogleSignIn = async () => {
+    const err = await loginWithGoogle();
+    if (err) toast.error(err);
+  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 px-4">
@@ -75,7 +82,7 @@ export default function RegisterPage() {
           <Button
             variant="outline"
             className="w-full h-11 gap-2 text-sm font-medium"
-            onClick={() => toast.info("Google sign-in coming soon!")}
+            onClick={() => void handleGoogleSignIn()}
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>

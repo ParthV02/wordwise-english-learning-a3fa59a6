@@ -5,7 +5,10 @@ import { wordOfTheDay, wordHistory } from "@/data/mockData";
 import { toast } from "sonner";
 import { speak } from "@/lib/tts";
 
+import { useAuth } from "@/contexts/AuthContext";
+
 export default function WordOfDayPage() {
+  const { user, updateUser } = useAuth();
   const [reviewed, setReviewed] = useState(false);
   const [rating, setRating] = useState(0);
 
@@ -15,6 +18,34 @@ export default function WordOfDayPage() {
     d.setDate(d.getDate() - (6 - i));
     return { date: d, isToday: i === 6 };
   });
+
+  const handleReviewWord = () => {
+    if (!user) return;
+    setReviewed(true);
+    
+    // Save to global word bank
+    const word = wordOfTheDay.word;
+    const wordBank = user.wordBank || [];
+    const already = wordBank.some((w: any) => 
+      (typeof w === "string" ? w : w.word).toLowerCase() === word.toLowerCase()
+    );
+
+    if (!already) {
+      updateUser({
+        wordBank: [...wordBank, { 
+          word, 
+          definition: wordOfTheDay.definition,
+          ipa: wordOfTheDay.ipa,
+          added: new Date().toISOString().split("T")[0],
+          mastery: 0
+        }],
+        wordsLearned: user.wordsLearned + 1
+      });
+      toast.success(`"${word}" marked as reviewed and saved to Word Bank!`);
+    } else {
+      toast.info(`"${word}" marked as reviewed!`);
+    }
+  };
 
   return (
     <div className="container py-8 space-y-8">
@@ -82,7 +113,7 @@ export default function WordOfDayPage() {
             ))}
           </div>
           <Button
-            onClick={() => { setReviewed(true); toast.success("Word marked as reviewed!"); }}
+            onClick={handleReviewWord}
             disabled={reviewed}
             className={`rounded-lg ${reviewed ? "bg-success/80" : "bg-success hover:bg-success/90"} text-success-foreground`}
           >
