@@ -12,6 +12,7 @@ export interface UserData {
   wordsDueToday: number;
   currentStreak: number;
   longestStreak: number;
+  lastActiveDate: string;   // "YYYY-MM-DD" — used for streak tracking
   wordBank: any[];
   quizHistory: any[];
   pronunciationLogs: any[];
@@ -71,6 +72,32 @@ function saveAllPasswordResetRequests(requests: PasswordResetRequest[]) {
   localStorage.setItem("wordwise_password_resets", JSON.stringify(requests));
 }
 
+/**
+ * Computes updated streak fields based on the user's lastActiveDate.
+ * - Same day  → no change (already counted today)
+ * - Yesterday → extend streak by 1
+ * - Older / missing → reset to 1
+ * Always bumps longestStreak if currentStreak exceeds it.
+ */
+function computeStreak(u: UserData): Pick<UserData, "currentStreak" | "longestStreak" | "lastActiveDate"> {
+  const today = new Date().toISOString().split("T")[0];
+  const last = u.lastActiveDate || "";
+
+  if (last === today) {
+    // Already counted today — no change
+    return { currentStreak: u.currentStreak, longestStreak: u.longestStreak, lastActiveDate: today };
+  }
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split("T")[0];
+
+  const newStreak = last === yesterdayStr ? (u.currentStreak || 0) + 1 : 1;
+  const newLongest = Math.max(u.longestStreak || 0, newStreak);
+
+  return { currentStreak: newStreak, longestStreak: newLongest, lastActiveDate: today };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const getAppBaseUrl = () => {
     const configured = import.meta.env.VITE_APP_URL as string | undefined;
@@ -85,8 +112,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const u = localStorage.getItem("wordwise_user");
     if (t && u) {
       try {
+        const parsed: UserData = JSON.parse(u);
+        // Update streak on session restore (app open / page refresh)
+        const streakUpdate = computeStreak(parsed);
+        const updated = { ...parsed, ...streakUpdate };
+        // Persist streak update
+        localStorage.setItem("wordwise_user", JSON.stringify(updated));
+        const users = getAllUsers();
+        const idx = users.findIndex(usr => usr.email === updated.email);
+        if (idx >= 0) { users[idx] = updated; saveAllUsers(users); }
         setToken(t);
-        setUser(JSON.parse(u));
+        setUser(updated);
       } catch {
         localStorage.removeItem("wordwise_token");
         localStorage.removeItem("wordwise_user");
@@ -106,17 +142,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const found = users.find(u => u.email === email);
     if (!found) return "Invalid email or password";
     if (found.password !== password) return "Invalid email or password";
+    // Apply streak on login
+    const streakUpdate = computeStreak(found);
+    const loggedIn = { ...found, ...streakUpdate };
+    const idx = users.findIndex(u => u.email === email);
+    if (idx >= 0) { users[idx] = loggedIn; saveAllUsers(users); }
     const newToken = btoa(email + Date.now());
     localStorage.setItem("wordwise_token", newToken);
-    localStorage.setItem("wordwise_user", JSON.stringify(found));
+    localStorage.setItem("wordwise_user", JSON.stringify(loggedIn));
     setToken(newToken);
-    setUser(found);
+    setUser(loggedIn);
     return null;
   };
 
   const register = (name: string, email: string, password: string): string | null => {
     const users = getAllUsers();
     if (users.find(u => u.email === email)) return "Email is already registered";
+    const today = new Date().toISOString().split("T")[0];
     const newUser: UserData = {
       name, email, password,
       avatar: name.charAt(0).toUpperCase(),
@@ -124,13 +166,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       pronunciationAccuracy: 0,
       weeklyQuizScore: 0,
       wordsDueToday: 0,
-      currentStreak: 0,
-      longestStreak: 0,
+      currentStreak: 1,
+      longestStreak: 1,
+      lastActiveDate: today,
       wordBank: [],
       quizHistory: [],
       pronunciationLogs: [],
       newsHistory: [],
-      joinDate: new Date().toISOString().split("T")[0],
+      joinDate: today,
       cefr: "A2",
     };
     users.push(newUser);
@@ -211,7 +254,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       saveAllUsers(users);
     }
 
-    applyAuthState(existing, data.session.access_token);
+    const streakUpdate = computeStreak(existing);
+    const withStreak = { ...existing, ...streakUpdate };
+    // Persist streak
+    const updIdx = users.findIndex((u) => u.email.toLowerCase() === email.toLowerCase());
+    if (updIdx >= 0) { users[updIdx] = withStreak; saveAllUsers(users); }
+
+    applyAuthState(withStreak, data.session.access_token);
     return null;
   };
 

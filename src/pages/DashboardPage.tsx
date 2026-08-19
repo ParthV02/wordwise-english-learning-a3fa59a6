@@ -1,11 +1,16 @@
-import { Link } from "react-router-dom";
-import { BookOpen, Mic, BarChart3, Calendar, ArrowRight, Play, Star, Newspaper, Trophy, FolderOpen, Puzzle, Flame } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  BookOpen, Mic, BarChart3, Calendar, ArrowRight, Play,
+  Star, Newspaper, Trophy, FolderOpen, Puzzle, Flame,
+  Loader2, Volume2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { wordOfTheDay, modules } from "@/data/mockData";
+import { modules } from "@/data/mockData";
 import { speak } from "@/lib/tts";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { getWordOfTheDay, type DictionaryEntry } from "@/lib/dictionary";
 
 const iconMap: Record<string, React.ElementType> = {
   Mic, Puzzle, Newspaper, Calendar, Trophy, FolderOpen,
@@ -19,10 +24,56 @@ function getGreeting() {
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
+  const navigate = useNavigate();
   const [reviewed, setReviewed] = useState(false);
   const [rating, setRating] = useState(0);
   const firstName = user?.name?.split(" ")[0] ?? "Learner";
+
+  // ── Live Word of the Day ────────────────────────────────────────────────────
+  const [wotd, setWotd] = useState<DictionaryEntry | null>(null);
+  const [wotdLoading, setWotdLoading] = useState(true);
+
+  useEffect(() => {
+    getWordOfTheDay()
+      .then((entry) => { setWotd(entry); setWotdLoading(false); })
+      .catch(() => setWotdLoading(false));
+  }, []);
+
+  const handleListen = () => {
+    if (!wotd) return;
+    if (wotd.audioUrl) {
+      new Audio(wotd.audioUrl).play().catch(() => speak(wotd.word));
+    } else {
+      speak(wotd.word);
+    }
+  };
+
+  const handleSaveWord = () => {
+    if (!user || !wotd) return;
+    const word = wotd.word;
+    const wordBank = user.wordBank || [];
+    const already = wordBank.some((w: any) =>
+      (typeof w === "string" ? w : w.word).toLowerCase() === word.toLowerCase()
+    );
+    if (!already) {
+      updateUser({
+        wordBank: [
+          ...wordBank,
+          { word, definition: wotd.definition, ipa: wotd.phonetic, added: new Date().toISOString().split("T")[0], mastery: 0 },
+        ],
+        wordsLearned: user.wordsLearned + 1,
+      });
+      toast.success(`"${word}" saved to Word Bank!`);
+    } else {
+      toast.info(`"${word}" is already in your Word Bank`);
+    }
+  };
+
+  const handleReview = () => {
+    setReviewed(true);
+    handleSaveWord();
+  };
 
   const stats = [
     { label: "Words Learned", value: user?.wordsLearned ?? 0, icon: BookOpen, color: "blue" as const },
@@ -30,11 +81,6 @@ export default function DashboardPage() {
     { label: "Quiz Score", value: user?.weeklyQuizScore ? `${user.weeklyQuizScore}%` : "--", icon: BarChart3, color: "blue" as const },
     { label: "Due Today", value: user?.wordsDueToday ?? 0, icon: Calendar, color: "green" as const },
   ];
-
-  const handleReview = () => {
-    setReviewed(true);
-    toast.info("Reviewed!");
-  };
 
   const paths: Record<string, string> = {
     pronunciation: "/pronunciation", decomposer: "/decomposer", news: "/news",
@@ -47,9 +93,16 @@ export default function DashboardPage() {
       <div className="space-y-2">
         <h1 className="text-3xl font-bold text-heading">{getGreeting()}, {firstName}</h1>
         <p className="text-muted-foreground">Ready to learn something new today?</p>
-        <div className="flex items-center gap-1.5 mt-1">
-          <Flame className="h-5 w-5 text-gold" />
-          <span className="text-sm font-bold text-gold">{user?.currentStreak ?? 0} day streak</span>
+        <div className="flex items-center gap-4 mt-1 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <Flame className="h-5 w-5 text-gold" />
+            <span className="text-sm font-bold text-gold">{user?.currentStreak ?? 0} day streak</span>
+          </div>
+          {(user?.longestStreak ?? 0) > 0 && (
+            <span className="text-xs text-muted-foreground">
+              🏆 Best: <strong className="text-heading">{user?.longestStreak}</strong> days
+            </span>
+          )}
         </div>
       </div>
 
@@ -73,48 +126,103 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Word of the Day */}
+      {/* Word of the Day — live */}
       <div className="rounded-xl border-l-4 border-l-green-card-border bg-card p-6 shadow-md">
-        <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-success">Word of the Day</div>
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-3">
-            <h2 className="text-3xl font-bold text-heading">{wordOfTheDay.word}</h2>
-            <p className="text-muted-foreground font-mono">{wordOfTheDay.ipa}</p>
-            <Button size="sm" variant="outline" onClick={() => speak(wordOfTheDay.word)} className="gap-2 border-primary text-primary hover:bg-primary/5">
-              <Play className="h-4 w-4" /> Listen
-            </Button>
-            <div className="flex flex-wrap gap-2 pt-2">
-              {wordOfTheDay.morphemes.map((m) => (
-                <span key={m.label} className={`rounded-full px-3 py-1 text-xs font-medium ${
-                  m.type === "root"
-                    ? "bg-green-card-bg text-success border border-green-card-border"
-                    : "bg-blue-card-bg text-primary border border-blue-card-border"
-                }`}>
-                  {m.label} <span className="opacity-60">({m.meaning})</span>
-                </span>
-              ))}
-            </div>
-            <p className="text-body leading-relaxed">{wordOfTheDay.definition}</p>
-            <p className="text-sm italic text-muted-foreground">"{wordOfTheDay.example}"</p>
-          </div>
-          <div className="flex flex-col items-end gap-3">
-            <div className="flex gap-1">
-              {[1,2,3,4,5].map((s) => (
-                <button key={s} onClick={() => setRating(s)}>
-                  <Star className={`h-5 w-5 transition-colors ${s <= rating ? "fill-gold text-gold" : "text-border"}`} />
-                </button>
-              ))}
-            </div>
-            <Button onClick={handleReview} disabled={reviewed}
-              className={`rounded-lg ${reviewed ? "bg-success/80" : "bg-success hover:bg-success/90"} text-success-foreground`}>
-              {reviewed ? "✓ Reviewed" : "Mark as Reviewed"}
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => toast.success("Word saved!")}
-              className="border-success text-success hover:bg-success/5">
-              Save to Word Bank
-            </Button>
-          </div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs font-semibold uppercase tracking-wider text-success">Word of the Day</div>
+          <Link
+            to="/word-of-day"
+            className="text-xs text-primary hover:underline flex items-center gap-1"
+          >
+            Full details <ArrowRight className="h-3 w-3" />
+          </Link>
         </div>
+
+        {wotdLoading ? (
+          /* Skeleton */
+          <div className="animate-pulse space-y-3">
+            <div className="h-8 w-48 rounded bg-muted" />
+            <div className="h-4 w-32 rounded bg-muted" />
+            <div className="h-4 w-full rounded bg-muted" />
+            <div className="h-4 w-4/5 rounded bg-muted" />
+          </div>
+        ) : wotd ? (
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-3 flex-1">
+              <h2 className="text-3xl font-bold text-heading capitalize">{wotd.word}</h2>
+              {wotd.phonetic && (
+                <p className="text-muted-foreground font-mono text-sm">{wotd.phonetic}</p>
+              )}
+              {wotd.partOfSpeech && (
+                <span className="text-xs italic text-muted-foreground">{wotd.partOfSpeech}</span>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleListen}
+                  className="gap-2 border-primary text-primary hover:bg-primary/5"
+                >
+                  <Play className="h-4 w-4" /> Listen
+                </Button>
+              </div>
+
+              {/* Synonyms as chips if available */}
+              {wotd.synonyms.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {wotd.synonyms.slice(0, 4).map((s) => (
+                    <span
+                      key={s}
+                      className="rounded-full bg-blue-card-bg px-3 py-0.5 text-xs font-medium text-primary border border-blue-card-border"
+                    >
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-body leading-relaxed">{wotd.definition}</p>
+              {wotd.example && (
+                <p className="text-sm italic text-muted-foreground">"{wotd.example}"</p>
+              )}
+            </div>
+
+            {/* Right side actions */}
+            <div className="flex flex-col items-end gap-3 shrink-0">
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <button key={s} onClick={() => setRating(s)}>
+                    <Star className={`h-5 w-5 transition-colors ${s <= rating ? "fill-gold text-gold" : "text-border"}`} />
+                  </button>
+                ))}
+              </div>
+              <Button
+                onClick={handleReview}
+                disabled={reviewed}
+                className={`rounded-lg ${reviewed ? "bg-success/80" : "bg-success hover:bg-success/90"} text-success-foreground`}
+              >
+                {reviewed ? "✓ Reviewed" : "Mark as Reviewed"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSaveWord}
+                className="border-success text-success hover:bg-success/5"
+              >
+                Save to Word Bank
+              </Button>
+            </div>
+          </div>
+        ) : (
+          /* Fallback if API failed */
+          <div className="text-center py-6">
+            <p className="text-sm text-muted-foreground mb-3">Could not load today's word.</p>
+            <Button size="sm" variant="outline" onClick={() => navigate("/word-of-day")} className="gap-2 text-primary border-primary">
+              Open Word of the Day <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Module Cards */}
@@ -124,10 +232,13 @@ export default function DashboardPage() {
           {modules.map((m) => {
             const Icon = iconMap[m.icon] || BookOpen;
             return (
-              <Link key={m.id} to={paths[m.id] || "/"}
+              <Link
+                key={m.id}
+                to={paths[m.id] || "/"}
                 className={`group flex items-center gap-4 rounded-xl border-l-4 bg-card p-5 shadow-sm transition-all hover:shadow-md ${
                   m.color === "blue" ? "border-l-blue-card-border" : "border-l-green-card-border"
-                }`}>
+                }`}
+              >
                 <div className={`rounded-lg p-2.5 ${m.color === "blue" ? "bg-blue-card-bg" : "bg-green-card-bg"}`}>
                   <Icon className={`h-5 w-5 ${m.color === "blue" ? "text-primary" : "text-success"}`} />
                 </div>

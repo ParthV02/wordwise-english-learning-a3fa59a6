@@ -25,7 +25,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 3, ba
 export async function generateQuizFromWords(words: string[]) {
   const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
   const PRIMARY_MODEL = "gemini-2.5-flash";
-  const FALLBACK_MODEL = "gemini-2.5-flash-lite";
+  const FALLBACK_MODEL = "gemini-2.0-flash";
 
   if (!API_KEY) {
     throw new Error("Gemini API key is not configured");
@@ -106,7 +106,8 @@ export async function expandNewsArticle(title: string, snippet: string) {
 
   const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
   const PRIMARY_MODEL = "gemini-2.5-flash";
-  const FALLBACK_MODEL = "gemini-2.5-flash-lite";
+  const FALLBACK_MODEL = "gemini-2.0-flash";
+  const LAST_RESORT_MODEL = "gemini-1.5-flash";
 
   if (!API_KEY) {
     throw new Error("Gemini API key is not configured");
@@ -114,15 +115,17 @@ export async function expandNewsArticle(title: string, snippet: string) {
 
   const prompt = `You are a professional journalist and expert English language teacher.
   
-  Based on the following news headline and short snippet, please write a complete, detailed, and engaging news article (approximately 300-400 words) suitable for an intermediate English learner (B1/B2 level).
+  Based on the following news headline and short snippet, please write a complete, detailed, and engaging news article (approximately 400-500 words) suitable for an intermediate English learner (B1/B2 level).
   
   Headline: ${title}
   Snippet: ${snippet}
   
   Guidelines:
-  - Write in clear, standard English.
+  - Write in clear, standard English with rich and varied vocabulary.
+  - Use a mix of common and slightly advanced vocabulary words naturally — this article will be used by English learners to discover and learn new words by clicking on them.
   - Structure the article with a clear introduction, 3-4 detailed body paragraphs, and a brief conclusion.
   - Ensure the tone is informative and neutral.
+  - Include contextual clues around advanced words so learners can guess meanings.
   - Reconstruct the story logically based on the provided info, using your broad knowledge of current events if necessary, but stay faithful to the main facts.
   - DO NOT include any preamble like "Here is the expanded article". Return ONLY the article text.`;
 
@@ -152,22 +155,25 @@ export async function expandNewsArticle(title: string, snippet: string) {
     return resultText;
   };
 
-  try {
-    const result = await sendRequest(PRIMARY_MODEL);
-    newsCache[cacheKey] = result;
-    return result;
-  } catch (error: any) {
-    if (error.status === 503 || error.status === 429) {
-      console.warn(`Primary model issue (${error.status}). Attempting fallback model for news expansion...`);
-      try {
-        const result = await sendRequest(FALLBACK_MODEL);
-        newsCache[cacheKey] = result;
-        return result;
-      } catch (fallbackError) {
-        throw fallbackError;
+  // Try primary → fallback → last resort
+  const models = [PRIMARY_MODEL, FALLBACK_MODEL, LAST_RESORT_MODEL];
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      const result = await sendRequest(model);
+      newsCache[cacheKey] = result;
+      return result;
+    } catch (error: any) {
+      lastError = error;
+      console.warn(`Model ${model} failed (${error.status || "unknown"}). ${models.indexOf(model) < models.length - 1 ? "Trying next model..." : "All models exhausted."}`);
+      // Only retry on 503/429, break on other errors
+      if (error.status && error.status !== 503 && error.status !== 429) {
+        break;
       }
     }
-    console.error("Error in expandNewsArticle:", error);
-    throw error;
   }
+
+  console.error("Error in expandNewsArticle:", lastError);
+  throw lastError;
 }

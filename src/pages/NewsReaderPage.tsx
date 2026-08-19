@@ -173,7 +173,7 @@ export default function NewsReaderPage() {
             <div className="absolute inset-x-0 -top-4 flex justify-center z-20">
               <div className="bg-primary text-primary-foreground px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-lg animate-bounce">
                 <RefreshCw className="h-3 w-3 animate-spin" />
-                ✨ AI Reconstructing full article for practice...
+                Reconstructing Full Article
               </div>
             </div>
           )}
