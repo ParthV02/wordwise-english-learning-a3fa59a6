@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { ArrowLeft, Save, Volume2, Loader2, X, RefreshCw, ExternalLink } from "lucide-react";
+import { ArrowLeft, Save, Volume2, Loader2, X, RefreshCw, ExternalLink, Mic, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { speak } from "@/lib/tts";
@@ -19,6 +19,9 @@ interface DictionaryEntry {
 }
 
 import { expandNewsArticle } from "@/lib/gemini";
+import SpeakingRecorder from "@/components/speaking/SpeakingRecorder";
+import { analyzeReading, ReadingAnalysisResult } from "@/services/nlp/speechAnalysisService";
+import ReadingResultDashboard from "@/components/speaking/ReadingResultDashboard";
 
 export default function NewsReaderPage() {
   const { user, updateUser } = useAuth();
@@ -38,6 +41,10 @@ export default function NewsReaderPage() {
     data?: DictionaryEntry;
     error?: string;
   } | null>(null);
+
+  const [readMode, setReadMode] = useState<"read" | "aloud" | "result">("read");
+  const [readingResult, setReadingResult] = useState<ReadingAnalysisResult | null>(null);
+  const [analyzingReading, setAnalyzingReading] = useState(false);
 
   useEffect(() => {
     if (selectedArticle) {
@@ -140,7 +147,7 @@ export default function NewsReaderPage() {
 
     return (
       <div className="container py-8 max-w-3xl space-y-6 fade-in">
-        <Button variant="ghost" onClick={() => { setSelectedArticle(null); setPopupWord(null); setExpandedContent(null); }} className="gap-2 text-primary">
+        <Button variant="ghost" onClick={() => { setSelectedArticle(null); setPopupWord(null); setExpandedContent(null); setReadMode("read"); }} className="gap-2 text-primary">
           <ArrowLeft className="h-4 w-4" /> Back to Articles
         </Button>
         
@@ -166,7 +173,82 @@ export default function NewsReaderPage() {
               <img src={selectedArticle.urlToImage} alt={selectedArticle.title} className="w-full h-full object-cover" />
             </div>
           )}
+          
+          <div className="flex gap-3 pt-2">
+             <Button 
+               variant={readMode === "aloud" ? "default" : "outline"}
+               className="gap-2 rounded-xl"
+               onClick={() => setReadMode(readMode === "aloud" ? "read" : "aloud")}
+             >
+               <Mic className="h-4 w-4" />
+               Read Aloud & Analyze
+             </Button>
+          </div>
         </div>
+
+        {readMode === "aloud" && (
+           <div className="bg-blue-card-bg border border-blue-card-border rounded-2xl p-6 shadow-sm mb-6 fade-in">
+             <div className="text-center mb-6">
+               <h3 className="text-xl font-bold text-primary flex items-center justify-center gap-2">
+                 <Activity className="h-5 w-5" /> Reading Analyzer
+               </h3>
+               <p className="text-sm text-muted-foreground mt-1">Read the article aloud clearly. We will analyze your pacing and pronunciation.</p>
+             </div>
+             
+             {analyzingReading ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                  <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                  <p className="font-medium text-heading">Analyzing your reading...</p>
+                </div>
+             ) : (
+                <SpeakingRecorder 
+                  hideTopic
+                  maxDurationSeconds={300} // Up to 5 mins for reading
+                  onRecordingComplete={async (transcript, duration) => {
+                    setAnalyzingReading(true);
+                    try {
+                      const res = await analyzeReading(displayContent, transcript, duration);
+                      
+                      // Update User Data Reading Metrics
+                      if (user) {
+                        const currentArticles = user.reading?.articlesCompleted || 0;
+                        const currentPron = user.reading?.averagePronunciation || 0;
+                        const currentClarity = user.reading?.averageClarity || 0;
+                        
+                        const newPron = Math.round(((currentPron * currentArticles) + res.scores.pronunciation) / (currentArticles + 1));
+                        const newClarity = Math.round(((currentClarity * currentArticles) + res.scores.clarity) / (currentArticles + 1));
+                        
+                        updateUser({
+                          reading: {
+                            articlesCompleted: currentArticles + 1,
+                            averagePronunciation: newPron,
+                            averageClarity: newClarity
+                          }
+                        });
+                      }
+
+                      setReadingResult(res);
+                      setReadMode("result");
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to analyze reading");
+                      setReadMode("read");
+                    } finally {
+                      setAnalyzingReading(false);
+                    }
+                  }} 
+                />
+             )}
+           </div>
+        )}
+
+        {readMode === "result" && readingResult && (
+           <div className="mb-6 fade-in">
+             <ReadingResultDashboard 
+               result={readingResult}
+               onRetry={() => setReadMode("aloud")}
+             />
+           </div>
+        )}
 
         <div className="relative rounded-2xl bg-card p-10 shadow-xl border border-border leading-relaxed text-body text-xl shadow-primary/5">
           {isExpanding && (

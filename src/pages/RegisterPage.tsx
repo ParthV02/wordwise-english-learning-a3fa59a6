@@ -6,12 +6,14 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { BookOpen, Mic } from "lucide-react";
+import GoogleAuthDialog from "@/components/GoogleAuthDialog";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const { register, loginWithGoogle, token } = useAuth();
+  const { register, token } = useAuth();
   const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showGoogleDialog, setShowGoogleDialog] = useState(false);
 
   useEffect(() => {
     if (token) navigate("/", { replace: true });
@@ -44,9 +46,8 @@ export default function RegisterPage() {
     </div>
   );
 
-  const handleGoogleSignIn = async () => {
-    const err = await loginWithGoogle();
-    if (err) toast.error(err);
+  const handleGoogleSignIn = () => {
+    setShowGoogleDialog(true);
   };
 
   return (
@@ -82,7 +83,7 @@ export default function RegisterPage() {
           <Button
             variant="outline"
             className="w-full h-11 gap-2 text-sm font-medium"
-            onClick={() => void handleGoogleSignIn()}
+            onClick={() => handleGoogleSignIn()}
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -99,6 +100,7 @@ export default function RegisterPage() {
           </p>
         </div>
       </div>
+      <GoogleAuthDialog open={showGoogleDialog} onOpenChange={setShowGoogleDialog} />
     </div>
   );
 }

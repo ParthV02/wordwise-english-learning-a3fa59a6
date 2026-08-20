@@ -20,6 +20,8 @@ import QuizPage from "./pages/QuizPage";
 import CategoryExplorerPage from "./pages/CategoryExplorerPage";
 import ProgressPage from "./pages/ProgressPage";
 import WordBankPage from "./pages/WordBankPage";
+import UserProfilePage from "./pages/UserProfilePage";
+import GrammarTrainerPage from "./pages/GrammarTrainerPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +52,8 @@ const App = () => {
                 <Route path="/categories" element={<CategoryExplorerPage />} />
                 <Route path="/progress" element={<ProgressPage />} />
                 <Route path="/word-bank" element={<WordBankPage />} />
+                <Route path="/profile" element={<UserProfilePage />} />
+                <Route path="/grammar" element={<GrammarTrainerPage />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

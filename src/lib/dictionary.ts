@@ -90,60 +90,77 @@ function pickWordForDate(dateStr: string): string {
   return WORD_POOL[hash % WORD_POOL.length];
 }
 
+const DICTIONARY_API_BASE = (import.meta.env.VITE_DICTIONARY_API_URL || "https://api.dictionaryapi.dev/api/v2/entries/en").replace(/\/+$/, "");
+
 /** Fetch full entry from the Free Dictionary API. */
 async function fetchFromDictionaryApi(word: string): Promise<DictionaryEntry> {
-  const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+  try {
+    const res = await fetch(`${DICTIONARY_API_BASE}/${encodeURIComponent(word)}`);
 
-  if (!res.ok) {
-    throw new Error(`Dictionary API error ${res.status} for word "${word}"`);
-  }
-
-  const data = await res.json();
-  const entry = data[0];
-
-  // Extract the first valid phonetic with audio
-  const phoneticObj = (entry.phonetics as any[]).find(
-    (p: any) => p.text && p.audio
-  ) || (entry.phonetics as any[])[0] || {};
-
-  const phonetic: string = phoneticObj.text || entry.phonetic || "";
-  const audioUrl: string = phoneticObj.audio || "";
-
-  // Walk meanings to find first definition + example + part of speech
-  let partOfSpeech = "";
-  let definition = "";
-  let example = "";
-  const synonyms: string[] = [];
-  const antonyms: string[] = [];
-
-  for (const meaning of entry.meanings as any[]) {
-    if (!partOfSpeech) partOfSpeech = meaning.partOfSpeech;
-
-    for (const def of meaning.definitions as any[]) {
-      if (!definition) {
-        definition = def.definition;
-        example = def.example || "";
-      }
-      synonyms.push(...(def.synonyms || []));
-      antonyms.push(...(def.antonyms || []));
+    if (!res.ok) {
+      throw new Error(`Dictionary API error ${res.status} for word "${word}"`);
     }
 
-    synonyms.push(...(meaning.synonyms || []));
-    antonyms.push(...(meaning.antonyms || []));
+    const data = await res.json();
+    const entry = data[0];
 
-    if (definition) break;
+    // Extract the first valid phonetic with audio
+    const phoneticObj = (entry.phonetics as any[])?.find(
+      (p: any) => p.text && p.audio
+    ) || (entry.phonetics as any[])?.[0] || {};
+
+    const phonetic: string = phoneticObj.text || entry.phonetic || "";
+    const audioUrl: string = phoneticObj.audio || "";
+
+    // Walk meanings to find first definition + example + part of speech
+    let partOfSpeech = "";
+    let definition = "";
+    let example = "";
+    const synonyms: string[] = [];
+    const antonyms: string[] = [];
+
+    for (const meaning of entry.meanings as any[] || []) {
+      if (!partOfSpeech) partOfSpeech = meaning.partOfSpeech;
+
+      for (const def of meaning.definitions as any[] || []) {
+        if (!definition) {
+          definition = def.definition;
+          example = def.example || "";
+        }
+        synonyms.push(...(def.synonyms || []));
+        antonyms.push(...(def.antonyms || []));
+      }
+
+      synonyms.push(...(meaning.synonyms || []));
+      antonyms.push(...(meaning.antonyms || []));
+
+      if (definition) break;
+    }
+
+    return {
+      word: entry.word,
+      phonetic,
+      partOfSpeech,
+      definition,
+      example,
+      synonyms: [...new Set(synonyms)].slice(0, 5),
+      antonyms: [...new Set(antonyms)].slice(0, 5),
+      audioUrl,
+    };
+  } catch (err: any) {
+    console.warn("Dictionary API failed in fetchFromDictionaryApi, falling back to Gemini:", err.message);
+    const full = await fallbackSearchWord(word);
+    return {
+      word: full.word,
+      phonetic: full.phonetic,
+      partOfSpeech: full.partOfSpeech,
+      definition: full.definition,
+      example: full.example,
+      synonyms: full.synonyms,
+      antonyms: full.antonyms,
+      audioUrl: full.audioUrl,
+    };
   }
-
-  return {
-    word: entry.word,
-    phonetic,
-    partOfSpeech,
-    definition,
-    example,
-    synonyms: [...new Set(synonyms)].slice(0, 5),
-    antonyms: [...new Set(antonyms)].slice(0, 5),
-    audioUrl,
-  };
 }
 
 /**
@@ -213,58 +230,109 @@ export async function getWordForDate(dateStr: string): Promise<DictionaryEntry> 
 /** Fetch the full entry with ALL meanings from the Dictionary API. */
 export async function searchWord(word: string): Promise<FullWordEntry> {
   const cleaned = word.trim().toLowerCase();
-  const res = await fetch(
-    `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(cleaned)}`
-  );
+  try {
+    const res = await fetch(
+      `${DICTIONARY_API_BASE}/${encodeURIComponent(cleaned)}`
+    );
 
-  if (res.status === 404) {
-    throw new Error(`"${word}" was not found in the dictionary.`);
+    if (res.status === 404) {
+      throw new Error(`"${word}" was not found in the dictionary.`);
+    }
+    if (!res.ok) {
+      throw new Error(`Dictionary API error ${res.status}.`);
+    }
+
+    const data = await res.json();
+    const entry = data[0];
+
+    // Phonetics
+    const phoneticObj =
+      (entry.phonetics as any[])?.find((p: any) => p.text && p.audio) ||
+      (entry.phonetics as any[])?.[0] ||
+      {};
+    const phonetic: string = phoneticObj.text || entry.phonetic || "";
+    const audioUrl: string = phoneticObj.audio || "";
+
+    // All meanings
+    const meanings: WordMeaning[] = (entry.meanings as any[] || []).map((m: any) => ({
+      partOfSpeech: m.partOfSpeech,
+      definitions: (m.definitions as any[] || []).slice(0, 4).map((d: any) => ({
+        definition: d.definition,
+        example: d.example,
+      })),
+      synonyms: [...new Set([...(m.synonyms || [])])].slice(0, 6) as string[],
+      antonyms: [...new Set([...(m.antonyms || [])])].slice(0, 6) as string[],
+    }));
+
+    // Primary definition
+    const primaryMeaning = meanings[0];
+    const partOfSpeech = primaryMeaning?.partOfSpeech ?? "";
+    const definition = primaryMeaning?.definitions[0]?.definition ?? "";
+    const example = primaryMeaning?.definitions[0]?.example ?? "";
+    const synonyms = primaryMeaning?.synonyms ?? [];
+    const antonyms = primaryMeaning?.antonyms ?? [];
+
+    return {
+      word: entry.word,
+      phonetic,
+      audioUrl,
+      partOfSpeech,
+      definition,
+      example,
+      synonyms,
+      antonyms,
+      meanings,
+    };
+  } catch (err: any) {
+    console.warn("Dictionary API failed, falling back to Gemini:", err.message);
+    return fallbackSearchWord(word);
   }
-  if (!res.ok) {
-    throw new Error(`Dictionary API error ${res.status}.`);
+}
+
+async function fallbackSearchWord(word: string): Promise<FullWordEntry> {
+  const prompt = `You are a dictionary API.
+Return the dictionary entry for the English word "${word}".
+If the word is not a real English word, provide your best guess or standard definition for it.
+
+Return ONLY a valid JSON object matching this schema:
+{
+  "word": string,
+  "phonetic": string (IPA format),
+  "audioUrl": string (just leave empty ""),
+  "partOfSpeech": string (primary part of speech),
+  "definition": string (primary definition),
+  "example": string (primary example sentence),
+  "synonyms": string[] (up to 5),
+  "antonyms": string[] (up to 5),
+  "meanings": [
+    {
+      "partOfSpeech": string,
+      "definitions": [
+        {
+          "definition": string,
+          "example": string
+        }
+      ],
+      "synonyms": string[],
+      "antonyms": string[]
+    }
+  ]
+}`;
+  
+  const result = await executeGeminiJson<FullWordEntry>(prompt);
+  
+  // Clean up
+  result.audioUrl = "";
+  if (!result.meanings || result.meanings.length === 0) {
+    result.meanings = [{
+      partOfSpeech: result.partOfSpeech,
+      definitions: [{ definition: result.definition, example: result.example }],
+      synonyms: result.synonyms || [],
+      antonyms: result.antonyms || []
+    }];
   }
-
-  const data = await res.json();
-  const entry = data[0];
-
-  // Phonetics
-  const phoneticObj =
-    (entry.phonetics as any[]).find((p: any) => p.text && p.audio) ||
-    (entry.phonetics as any[])[0] ||
-    {};
-  const phonetic: string = phoneticObj.text || entry.phonetic || "";
-  const audioUrl: string = phoneticObj.audio || "";
-
-  // All meanings
-  const meanings: WordMeaning[] = (entry.meanings as any[]).map((m: any) => ({
-    partOfSpeech: m.partOfSpeech,
-    definitions: (m.definitions as any[]).slice(0, 4).map((d: any) => ({
-      definition: d.definition,
-      example: d.example,
-    })),
-    synonyms: [...new Set([...(m.synonyms || [])])].slice(0, 6) as string[],
-    antonyms: [...new Set([...(m.antonyms || [])])].slice(0, 6) as string[],
-  }));
-
-  // Primary definition
-  const primaryMeaning = meanings[0];
-  const partOfSpeech = primaryMeaning?.partOfSpeech ?? "";
-  const definition = primaryMeaning?.definitions[0]?.definition ?? "";
-  const example = primaryMeaning?.definitions[0]?.example ?? "";
-  const synonyms = primaryMeaning?.synonyms ?? [];
-  const antonyms = primaryMeaning?.antonyms ?? [];
-
-  return {
-    word: entry.word,
-    phonetic,
-    audioUrl,
-    partOfSpeech,
-    definition,
-    example,
-    synonyms,
-    antonyms,
-    meanings,
-  };
+  
+  return result;
 }
 
 // ─── Gemini-powered morpheme decomposer ─────────────────────────────────────
@@ -291,19 +359,58 @@ async function fetchWithRetry(
   }
 }
 
+const PRIMARY_GEMINI_MODEL = "gemini-3.6-flash";
+const FALLBACK_GEMINI_MODEL = "gemini-3.5-flash";
+const LAST_RESORT_GEMINI_MODEL = "gemini-flash-latest";
+
+async function executeGeminiJson<T>(prompt: string): Promise<T> {
+  const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!GEMINI_KEY) throw new Error("Gemini API key is not configured.");
+
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: "application/json" },
+  });
+
+  const sendRequest = async (model: string): Promise<T> => {
+    const res = await fetchWithRetry(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw { status: res.status, message: err.error?.message || "Gemini error" };
+    }
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("Gemini returned no content.");
+    return JSON.parse(text) as T;
+  };
+
+  const models = [PRIMARY_GEMINI_MODEL, FALLBACK_GEMINI_MODEL, LAST_RESORT_GEMINI_MODEL];
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      return await sendRequest(model);
+    } catch (err: any) {
+      lastError = err;
+      if (err.status && err.status !== 503 && err.status !== 429 && err.status !== 404) {
+        break;
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 /**
  * Decompose a word into prefix / root / suffix using Gemini.
  * Returns a DecomposedWord that merges Dictionary API data with Gemini morphology.
  */
 export async function decomposeWord(word: string): Promise<DecomposedWord> {
-  const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!GEMINI_KEY) throw new Error("Gemini API key is not configured.");
-
   // Fetch dictionary data (may fail for uncommon words — that's fine)
   const fullEntry = await searchWord(word).catch(() => null);
-
-  // Build prompt — if dictionary API had no data, ask Gemini for definition too
-  const needsDefinition = !fullEntry;
 
   const prompt = `You are an expert English etymologist and linguist.
 
@@ -344,36 +451,7 @@ Important rules:
 - The definition, partOfSpeech, and example fields are mandatory — always provide them.
 - Always return valid JSON only.`;
 
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { responseMimeType: "application/json" },
-  });
-
-  const sendGemini = async (model: string) => {
-    const res = await fetchWithRetry(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body }
-    );
-    if (!res.ok) {
-      const err = await res.json();
-      throw { status: res.status, message: err.error?.message || "Gemini error" };
-    }
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Gemini returned no content.");
-    return JSON.parse(text);
-  };
-
-  let morphemes: any;
-  try {
-    morphemes = await sendGemini("gemini-2.5-flash");
-  } catch (e: any) {
-    if (e.status === 503 || e.status === 429) {
-      morphemes = await sendGemini("gemini-2.0-flash");
-    } else {
-      throw e;
-    }
-  }
+  const morphemes = await executeGeminiJson<any>(prompt);
 
   // Merge: prefer dictionary data when available, fall back to Gemini's definition
   return {
@@ -418,9 +496,6 @@ export async function getCategoryContext(
     // ignore
   }
 
-  const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!GEMINI_KEY) throw new Error("Gemini API key is not configured.");
-
   const prompt = `You are an expert English vocabulary educator.
 
 For the vocabulary category "${categoryName}" (used in an English learning app), provide:
@@ -433,36 +508,7 @@ Return ONLY a valid JSON object (no markdown, no backticks):
   "relatedTerms": string[]
 }`;
 
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { responseMimeType: "application/json" },
-  });
-
-  const sendGeminiCat = async (model: string): Promise<CategoryContext> => {
-    const res = await fetchWithRetry(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body }
-    );
-    if (!res.ok) {
-      const err = await res.json();
-      throw { status: res.status, message: err.error?.message || "Gemini error" };
-    }
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Gemini returned no content.");
-    return JSON.parse(text) as CategoryContext;
-  };
-
-  let result: CategoryContext;
-  try {
-    result = await sendGeminiCat("gemini-2.5-flash");
-  } catch (e: any) {
-    if (e.status === 503 || e.status === 429) {
-      result = await sendGeminiCat("gemini-2.0-flash");
-    } else {
-      throw e;
-    }
-  }
+  const result = await executeGeminiJson<CategoryContext>(prompt);
 
   // Cache in sessionStorage
   try {
@@ -499,9 +545,6 @@ export async function getCorrespondingWords(
     if (cached) return JSON.parse(cached) as CorrespondingWord[];
   } catch { /* ignore */ }
 
-  const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!GEMINI_KEY) throw new Error("Gemini API key is not configured.");
-
   const prompt = `You are an expert English morphologist.
 
 The word "${word}" contains the root morpheme "${root}".
@@ -518,36 +561,7 @@ Return ONLY a valid JSON array (no markdown, no backticks):
 
 Each "meaning" should be a very short definition (5-10 words max).`;
 
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { responseMimeType: "application/json" },
-  });
-
-  const sendGemini = async (model: string): Promise<CorrespondingWord[]> => {
-    const res = await fetchWithRetry(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body }
-    );
-    if (!res.ok) {
-      const err = await res.json();
-      throw { status: res.status, message: err.error?.message || "Gemini error" };
-    }
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Gemini returned no content.");
-    return JSON.parse(text) as CorrespondingWord[];
-  };
-
-  let result: CorrespondingWord[];
-  try {
-    result = await sendGemini("gemini-2.5-flash");
-  } catch (e: any) {
-    if (e.status === 503 || e.status === 429) {
-      result = await sendGemini("gemini-2.0-flash");
-    } else {
-      throw e;
-    }
-  }
+  const result = await executeGeminiJson<CorrespondingWord[]>(prompt);
 
   try {
     sessionStorage.setItem(cacheKey, JSON.stringify(result));
@@ -575,9 +589,6 @@ export async function getPrefixWords(
     if (cached) return JSON.parse(cached) as CorrespondingWord[];
   } catch { /* ignore */ }
 
-  const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!GEMINI_KEY) throw new Error("Gemini API key is not configured.");
-
   const prompt = `You are an expert English morphologist.
 
 The word "${word}" starts with the prefix "${prefix}".
@@ -592,36 +603,7 @@ Return ONLY a valid JSON array (no markdown, no backticks):
 
 Each "meaning" should be a very short definition (5-10 words max).`;
 
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { responseMimeType: "application/json" },
-  });
-
-  const sendGemini = async (model: string): Promise<CorrespondingWord[]> => {
-    const res = await fetchWithRetry(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body }
-    );
-    if (!res.ok) {
-      const err = await res.json();
-      throw { status: res.status, message: err.error?.message || "Gemini error" };
-    }
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Gemini returned no content.");
-    return JSON.parse(text) as CorrespondingWord[];
-  };
-
-  let result: CorrespondingWord[];
-  try {
-    result = await sendGemini("gemini-2.5-flash");
-  } catch (e: any) {
-    if (e.status === 503 || e.status === 429) {
-      result = await sendGemini("gemini-2.0-flash");
-    } else {
-      throw e;
-    }
-  }
+  const result = await executeGeminiJson<CorrespondingWord[]>(prompt);
 
   try {
     sessionStorage.setItem(cacheKey, JSON.stringify(result));
@@ -646,9 +628,6 @@ export async function getSuffixWords(
     if (cached) return JSON.parse(cached) as CorrespondingWord[];
   } catch { /* ignore */ }
 
-  const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!GEMINI_KEY) throw new Error("Gemini API key is not configured.");
-
   const prompt = `You are an expert English morphologist.
 
 The word "${word}" ends with the suffix "${suffix}".
@@ -663,36 +642,7 @@ Return ONLY a valid JSON array (no markdown, no backticks):
 
 Each "meaning" should be a very short definition (5-10 words max).`;
 
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { responseMimeType: "application/json" },
-  });
-
-  const sendGemini = async (model: string): Promise<CorrespondingWord[]> => {
-    const res = await fetchWithRetry(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body }
-    );
-    if (!res.ok) {
-      const err = await res.json();
-      throw { status: res.status, message: err.error?.message || "Gemini error" };
-    }
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Gemini returned no content.");
-    return JSON.parse(text) as CorrespondingWord[];
-  };
-
-  let result: CorrespondingWord[];
-  try {
-    result = await sendGemini("gemini-2.5-flash");
-  } catch (e: any) {
-    if (e.status === 503 || e.status === 429) {
-      result = await sendGemini("gemini-2.0-flash");
-    } else {
-      throw e;
-    }
-  }
+  const result = await executeGeminiJson<CorrespondingWord[]>(prompt);
 
   try {
     sessionStorage.setItem(cacheKey, JSON.stringify(result));
@@ -733,9 +683,6 @@ export async function getWordTranslations(
     if (cached) return JSON.parse(cached) as WordTranslation[];
   } catch { /* ignore */ }
 
-  const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!GEMINI_KEY) throw new Error("Gemini API key is not configured.");
-
   const prompt = `You are an expert multilingual translator specializing in Indian languages.
 
 The English word is: "${word}"
@@ -760,36 +707,7 @@ Return ONLY a valid JSON array (no markdown, no backticks):
   ...
 ]`;
 
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { responseMimeType: "application/json" },
-  });
-
-  const sendGemini = async (model: string): Promise<WordTranslation[]> => {
-    const res = await fetchWithRetry(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body }
-    );
-    if (!res.ok) {
-      const err = await res.json();
-      throw { status: res.status, message: err.error?.message || "Gemini error" };
-    }
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Gemini returned no content.");
-    return JSON.parse(text) as WordTranslation[];
-  };
-
-  let result: WordTranslation[];
-  try {
-    result = await sendGemini("gemini-2.5-flash");
-  } catch (e: any) {
-    if (e.status === 503 || e.status === 429) {
-      result = await sendGemini("gemini-2.0-flash");
-    } else {
-      throw e;
-    }
-  }
+  const result = await executeGeminiJson<WordTranslation[]>(prompt);
 
   try {
     sessionStorage.setItem(cacheKey, JSON.stringify(result));

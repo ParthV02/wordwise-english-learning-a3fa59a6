@@ -24,8 +24,9 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 3, ba
 
 export async function generateQuizFromWords(words: string[]) {
   const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-  const PRIMARY_MODEL = "gemini-2.5-flash";
-  const FALLBACK_MODEL = "gemini-2.0-flash";
+  const PRIMARY_MODEL = "gemini-3.6-flash";
+  const FALLBACK_MODEL = "gemini-3.5-flash";
+  const LAST_RESORT_MODEL = "gemini-flash-latest";
 
   if (!API_KEY) {
     throw new Error("Gemini API key is not configured");
@@ -105,9 +106,9 @@ export async function expandNewsArticle(title: string, snippet: string) {
   }
 
   const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-  const PRIMARY_MODEL = "gemini-2.5-flash";
-  const FALLBACK_MODEL = "gemini-2.0-flash";
-  const LAST_RESORT_MODEL = "gemini-1.5-flash";
+  const PRIMARY_MODEL = "gemini-3.6-flash";
+  const FALLBACK_MODEL = "gemini-3.5-flash";
+  const LAST_RESORT_MODEL = "gemini-flash-latest";
 
   if (!API_KEY) {
     throw new Error("Gemini API key is not configured");

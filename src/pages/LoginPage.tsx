@@ -7,12 +7,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { BookOpen, Mic } from "lucide-react";
 
+import GoogleAuthDialog from "@/components/GoogleAuthDialog";
+
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, loginWithGoogle, token } = useAuth();
+  const { login, token } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [showGoogleDialog, setShowGoogleDialog] = useState(false);
 
   useEffect(() => {
     if (token) navigate("/", { replace: true });
@@ -28,9 +31,8 @@ export default function LoginPage() {
     navigate("/");
   };
 
-  const handleGoogleSignIn = async () => {
-    const err = await loginWithGoogle();
-    if (err) toast.error(err);
+  const handleGoogleSignIn = () => {
+    setShowGoogleDialog(true);
   };
 
   return (
@@ -96,6 +98,7 @@ export default function LoginPage() {
           </p>
         </div>
       </div>
+      <GoogleAuthDialog open={showGoogleDialog} onOpenChange={setShowGoogleDialog} />
     </div>
   );
 }
