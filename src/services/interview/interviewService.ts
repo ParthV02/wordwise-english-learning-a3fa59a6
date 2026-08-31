@@ -1,3 +1,5 @@
+import { fetchWithRetry } from "@/lib/gemini";
+
 export interface InterviewQuestion {
   id: string;
   question: string;
@@ -19,42 +21,37 @@ export interface InterviewAnswerFeedback {
     relevance: number;
     fillers: number; // Percentage
   };
+  grammarErrors: {
+    type: string;
+    pattern: string;
+    original: string;
+    correction: string;
+    explanation: string;
+    severity: "low" | "medium" | "high";
+    confidence: number;
+  }[];
 }
 
+import { interviewQuestions } from "@/data/interviewQuestions";
+
 export async function generateInterviewQuestions(type: string, difficulty: string): Promise<InterviewQuestion[]> {
-  const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!API_KEY) throw new Error("Gemini API key is not configured");
-
-  const prompt = `You are an expert HR manager and technical interviewer.
-Generate 5 engaging interview questions for a candidate practicing their English.
-
-Interview Type: ${type}
-Difficulty Level: ${difficulty}
-
-Return ONLY a JSON array of objects with this schema:
-[
-  {
-    "id": "q1",
-    "question": "The interview question",
-    "context": "Optional short hint or context on what the interviewer is looking for"
+  // Map UI difficulty string to our structured data keys
+  let levelKey = "intermediate"; // default
+  const diffLower = difficulty.toLowerCase();
+  if (diffLower.includes("beginner") || diffLower.includes("a2")) {
+    levelKey = "beginner";
+  } else if (diffLower.includes("advanced") || diffLower.includes("c1")) {
+    levelKey = "advanced";
   }
-]`;
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${API_KEY}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" }
-    })
-  });
+  const questions = interviewQuestions[levelKey] || interviewQuestions["intermediate"];
 
-  if (!response.ok) throw new Error("Failed to generate questions");
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("No content returned");
-
-  return JSON.parse(text);
+  // Return the mapped questions
+  return questions.map((q) => ({
+    id: `q_${levelKey}_${q.order}`,
+    question: q.question,
+    context: q.context
+  }));
 }
 
 export async function evaluateInterviewAnswer(
@@ -97,27 +94,64 @@ Return ONLY a JSON object matching this schema:
     "vocabulary": number (0-100),
     "relevance": number (0-100),
     "clarity": number (0-100)
-  }
+  },
+  "grammarErrors": [
+    {
+      "type": "TENSE" | "PREPOSITION" | "ARTICLE" | "SUBJECT_VERB_AGREEMENT" | "WORD_ORDER" | "VERB_FORM" | "SINGULAR_PLURAL",
+      "pattern": "simple_past" | "present_perfect" | "in_on_at" | "etc",
+      "original": "the exact incorrect phrase from the transcript",
+      "correction": "the corrected phrase",
+      "explanation": "Short, friendly explanation of the rule",
+      "severity": "low" | "medium" | "high",
+      "confidence": number (0-1)
+    }
+  ]
 }`;
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${API_KEY}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" }
-    })
-  });
+  const models = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-latest"];
+  let parsed: any = null;
+  let lastError = new Error("Failed to evaluate answer");
 
-  if (!response.ok) throw new Error("Failed to evaluate answer");
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("No content returned");
+  for (const model of models) {
+    try {
+      const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
 
-  const parsed = JSON.parse(text);
+      if (!response.ok) throw new Error(`Model ${model} returned ${response.status}`);
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error("No content returned");
+
+      const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsed = JSON.parse(cleanText);
+      break; // Success! Break out of the fallback loop
+    } catch (e: any) {
+      console.warn(`Model ${model} failed: ${e.message}`);
+      lastError = e;
+    }
+  }
+
+  if (!parsed) {
+    throw lastError;
+  }
+
+  
+  // Safe defaults if Gemini hallucinates the schema
+  const metrics = parsed.metrics || {
+    clarity: 80,
+    relevance: 80,
+    grammar: 80,
+    vocabulary: 80
+  };
 
   // Approximate pronunciation score based on clarity for now, since we only have transcript
-  const pronunciation = parsed.metrics.clarity - 5; 
+  const pronunciation = metrics.clarity - 5; 
   // Pacing score
   let pacingScore = 100;
   if (wpm < 100) pacingScore -= (100 - wpm);
@@ -125,21 +159,22 @@ Return ONLY a JSON object matching this schema:
 
   // Overall Score weighting
   const score = Math.round(
-    (parsed.metrics.relevance * 0.3) +
-    (parsed.metrics.grammar * 0.2) +
-    (parsed.metrics.vocabulary * 0.2) +
-    (parsed.metrics.clarity * 0.15) +
+    (metrics.relevance * 0.3) +
+    (metrics.grammar * 0.2) +
+    (metrics.vocabulary * 0.2) +
+    (metrics.clarity * 0.15) +
     (Math.max(0, 100 - fillerPercentage * 5) * 0.15)
   );
 
   return {
     score,
     rating: parsed.rating || "GOOD",
-    strengths: parsed.strengths || [],
-    weaknesses: parsed.weaknesses || [],
-    improvedVersion: parsed.improvedVersion || "",
+    strengths: parsed.strengths || ["Good effort on pacing"],
+    weaknesses: parsed.weaknesses || ["Try to minimize fillers"],
+    improvedVersion: parsed.improvedVersion || answerTranscript,
+    grammarErrors: parsed.grammarErrors || [],
     metrics: {
-      ...parsed.metrics,
+      ...metrics,
       pronunciation: Math.max(0, pronunciation),
       pacing: Math.max(0, Math.min(100, pacingScore)),
       fillers: fillerPercentage

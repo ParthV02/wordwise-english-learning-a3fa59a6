@@ -42,14 +42,14 @@ ${spokenTranscript}
 
 Duration: ${durationSeconds} seconds.
 
-Please analyze the user's reading performance.
-1. Compare the transcript to the original text. Identify skipped words, repeated words, and words that were misrecognized or likely mispronounced.
+Please analyze the user's reading performance strictly distinguishing between "Word Recognized" and "Pronunciation Accuracy".
+1. Compare the transcript to the original text. Identify skipped words, repeated words, and words that were misrecognized.
 2. Evaluate Pacing (average conversational pace is ~130-150 words per minute).
 3. Evaluate Clarity (how well the speech recognizer understood them).
-4. Evaluate Pronunciation (based on substitutions/mistakes).
+4. Evaluate Pronunciation strictly. Just because a word appears in the transcript does NOT mean it was pronounced perfectly. If the transcript contains phonetic substitutions or errors near complex words, penalize pronunciation.
 5. Evaluate Pauses (if they took too long based on the duration).
 6. Provide exactly 3 strengths and 3 areas to improve (weaknesses).
-7. Provide a list of up to 5 specific words from the original text that the user seemed to struggle with (skipped, mispronounced, or substituted). These must be exact words from the original text.
+7. Provide a list of up to 5 specific words from the original text that the user seemed to struggle with (either skipped entirely, or recognized but likely mispronounced/poor pronunciation confidence). These must be exact words from the original text.
 
 Return ONLY a valid JSON object matching this schema:
 {

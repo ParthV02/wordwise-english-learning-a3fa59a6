@@ -168,24 +168,25 @@ async function fetchFromDictionaryApi(word: string): Promise<DictionaryEntry> {
  * - If the cache is valid (same date), returns the cached entry.
  * - Otherwise, picks today's word, fetches it from the API, and caches it.
  */
-export async function getWordOfTheDay(): Promise<DictionaryEntry> {
+export async function getWordOfTheDay(forceRandom = false): Promise<DictionaryEntry> {
   const today = todayString();
 
-  // Check localStorage cache
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const cached: CachedWord = JSON.parse(raw);
-      if (cached.date === today) {
-        return cached.entry;
+  if (!forceRandom) {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const cached: CachedWord = JSON.parse(raw);
+        if (cached.date === today) {
+          return cached.entry;
+        }
       }
+    } catch {
+      // Ignore parse errors
     }
-  } catch {
-    // Ignore parse errors
   }
 
   // Pick and fetch today's word
-  const word = pickWordForDate(today);
+  const word = forceRandom ? WORD_POOL[Math.floor(Math.random() * WORD_POOL.length)] : pickWordForDate(today);
   const entry = await fetchFromDictionaryApi(word);
 
   // Persist to localStorage
@@ -205,9 +206,9 @@ export function clearWordOfTheDayCache() {
  * Uses per-date localStorage cache keys so past words are remembered.
  * For today, delegates to getWordOfTheDay() to keep a single source of truth.
  */
-export async function getWordForDate(dateStr: string): Promise<DictionaryEntry> {
+export async function getWordForDate(dateStr: string, forceRandom = false): Promise<DictionaryEntry> {
   const today = todayString();
-  if (dateStr === today) return getWordOfTheDay();
+  if (dateStr === today) return getWordOfTheDay(forceRandom);
 
   const cacheKey = `wotd_${dateStr}`;
   try {

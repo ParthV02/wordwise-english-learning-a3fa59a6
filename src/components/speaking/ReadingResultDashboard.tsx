@@ -87,7 +87,7 @@ export default function ReadingResultDashboard({ result, onRetry }: ReadingResul
       {result.problemWords && result.problemWords.length > 0 && (
         <div className="pt-6 border-t border-border space-y-4">
           <h4 className="font-bold text-heading text-lg">Recommended Practice</h4>
-          <p className="text-sm text-muted-foreground">The system had difficulty recognizing these words. Try listening to them and repeating them slowly.</p>
+          <p className="text-sm text-muted-foreground">Some words may have been recognized, but your pronunciation may need improvement. Try listening to them and repeating them slowly.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {result.problemWords.map((word, i) => (
               <div key={i} className="flex items-center justify-between p-3 rounded-lg border border-border bg-card">

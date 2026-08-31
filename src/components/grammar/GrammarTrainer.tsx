@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { generateGrammarExercise, GrammarExercise } from "@/services/nlp/grammarExerciseGenerator";
+import { generateGrammarExerciseBatch, GrammarExercise } from "@/services/nlp/grammarExerciseGenerator";
 import GrammarQuestion from "./GrammarQuestion";
 import { Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,29 +12,51 @@ export default function GrammarTrainer() {
   const [error, setError] = useState<string | null>(null);
   const [sessionScore, setSessionScore] = useState({ correct: 0, total: 0 });
 
+  const [exerciseQueue, setExerciseQueue] = useState<GrammarExercise[]>([]);
+  const [questionPool, setQuestionPool] = useState<GrammarExercise[]>([]);
+
+  const getTargetPatternAndLevel = () => {
+    let targetPattern = "simple_past";
+    let level = 1;
+
+    if (user && user.grammarProfile) {
+      const patterns = Object.keys(user.grammarProfile);
+      if (patterns.length > 0) {
+        const weakest = patterns.sort((a, b) => user.grammarProfile![a].score - user.grammarProfile![b].score)[0];
+        targetPattern = weakest;
+        const score = user.grammarProfile[weakest].score;
+        if (score > 80) level = 4;
+        else if (score > 60) level = 3;
+        else if (score > 40) level = 2;
+        else level = 1;
+      }
+    }
+    return { targetPattern, level };
+  };
+
   const loadNextQuestion = async () => {
+    if (exerciseQueue.length > 0) {
+      const nextEx = exerciseQueue[0];
+      setExercise(nextEx);
+      
+      let nextQueue = exerciseQueue.slice(1);
+      if (nextQueue.length <= 2 && questionPool.length > 0) {
+        const shuffled = [...questionPool].sort(() => Math.random() - 0.5);
+        nextQueue = [...nextQueue, ...shuffled];
+      }
+      setExerciseQueue(nextQueue);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setExercise(null);
     try {
-      let targetPattern = "simple_past";
-      let level = 1;
-
-      if (user && user.grammarProfile) {
-        const patterns = Object.keys(user.grammarProfile);
-        if (patterns.length > 0) {
-          const weakest = patterns.sort((a, b) => user.grammarProfile![a].score - user.grammarProfile![b].score)[0];
-          targetPattern = weakest;
-          const score = user.grammarProfile[weakest].score;
-          if (score > 80) level = 4;
-          else if (score > 60) level = 3;
-          else if (score > 40) level = 2;
-          else level = 1;
-        }
-      }
-
-      const ex = await generateGrammarExercise(targetPattern, level);
-      setExercise(ex);
+      const { targetPattern, level } = getTargetPatternAndLevel();
+      const exBatch = await generateGrammarExerciseBatch(targetPattern, level, 20);
+      setQuestionPool(exBatch);
+      setExercise(exBatch[0]);
+      setExerciseQueue(exBatch.slice(1));
     } catch (e: any) {
       setError(e.message || "Failed to generate exercise");
     } finally {

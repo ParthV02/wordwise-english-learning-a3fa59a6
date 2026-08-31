@@ -226,21 +226,81 @@ export default function InterviewTrainer() {
 
       {sessionState === "review" && (
          <div className="bg-card border border-border p-10 rounded-2xl shadow-xl space-y-8 fade-in text-center max-w-2xl mx-auto">
-           <h2 className="text-3xl font-bold text-heading">Interview Complete! 🎉</h2>
-           <p className="text-muted-foreground text-lg">You completed {questions.length} questions.</p>
+           <h2 className="text-xl font-bold text-muted-foreground uppercase tracking-widest">Interview Complete</h2>
+           <h3 className="text-4xl font-black text-heading">
+             {Math.round(feedbacks.reduce((sum, f) => sum + f.score, 0) / feedbacks.length) >= 80 ? "🌟 NICE!" : "👍 GOOD JOB"}
+           </h3>
            
-           <div className="flex justify-center pt-4">
+           <div className="flex justify-center py-4">
              <div className="bg-primary/10 rounded-full h-32 w-32 flex flex-col items-center justify-center border-4 border-primary shadow-inner">
                <span className="text-4xl font-black text-primary">
                  {Math.round(feedbacks.reduce((sum, f) => sum + f.score, 0) / feedbacks.length)}
                </span>
-               <span className="text-xs font-bold uppercase tracking-widest text-primary/70">Avg Score</span>
+               <span className="text-xs font-bold uppercase tracking-widest text-primary/70">/ 100</span>
              </div>
            </div>
            
-           <Button onClick={() => setSessionState("setup")} className="gap-2">
-             <RefreshCw className="h-4 w-4" /> Practice Another Interview
-           </Button>
+           <div className="w-full border-t border-b border-border py-6 my-6">
+             <div className="space-y-3 max-w-md mx-auto text-left">
+               {[
+                 { label: "Speaking Fluency", value: Math.round(feedbacks.reduce((s, f) => s + f.score, 0) / feedbacks.length) },
+                 { label: "Pronunciation", value: Math.round(feedbacks.reduce((s, f) => s + (f.metrics?.pronunciation || 0), 0) / feedbacks.length) },
+                 { label: "Clarity", value: Math.round(feedbacks.reduce((s, f) => s + (f.metrics?.clarity || 0), 0) / feedbacks.length) },
+                 { label: "Grammar", value: Math.round(feedbacks.reduce((s, f) => s + (f.metrics?.grammar || 0), 0) / feedbacks.length) },
+                 { label: "Vocabulary", value: Math.round(feedbacks.reduce((s, f) => s + (f.metrics?.vocabulary || 0), 0) / feedbacks.length) },
+                 { label: "Pacing", value: Math.round(feedbacks.reduce((s, f) => s + (f.metrics?.pacing || 0), 0) / feedbacks.length) },
+                 { label: "Filler Words", value: Math.max(0, 100 - Math.round(feedbacks.reduce((s, f) => s + (f.metrics?.fillers || 0), 0) / feedbacks.length)) }
+               ].map((metric, i) => (
+                 <div key={i} className="flex justify-between items-center text-sm font-medium">
+                   <span className="text-muted-foreground">{metric.label}</span>
+                   <span className="text-heading font-bold">{metric.value}</span>
+                 </div>
+               ))}
+             </div>
+           </div>
+
+           <div className="w-full border-b border-border pb-6 my-6 text-left max-w-md mx-auto space-y-4">
+             <div className="flex justify-between items-center">
+               <span className="text-muted-foreground font-medium text-sm">Difficulty Completed:</span>
+               <span className="text-heading font-bold">{config.difficulty.split(' ')[0]}</span>
+             </div>
+             <div className="flex justify-between items-center">
+               <span className="text-muted-foreground font-medium text-sm">Questions Completed:</span>
+               <span className="text-heading font-bold">{questions.length} / {questions.length}</span>
+             </div>
+           </div>
+           
+           <div className="grid md:grid-cols-2 gap-6 text-left max-w-md mx-auto">
+             <div className="space-y-3">
+               <h4 className="font-bold text-success flex items-center gap-2"><CheckCircle2 className="h-4 w-4" /> Strong Areas</h4>
+               <ul className="space-y-1">
+                 <li className="text-sm text-muted-foreground flex items-center gap-2">✓ Clear communication</li>
+                 <li className="text-sm text-muted-foreground flex items-center gap-2">✓ Relevant answers</li>
+               </ul>
+             </div>
+             <div className="space-y-3">
+               <h4 className="font-bold text-destructive flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Improve</h4>
+               <ul className="space-y-1">
+                 <li className="text-sm text-muted-foreground flex items-center gap-2">⚠ Reduce filler words</li>
+                 <li className="text-sm text-muted-foreground flex items-center gap-2">⚠ Improve pacing</li>
+               </ul>
+             </div>
+           </div>
+
+           <div className="border-t border-border pt-6 mt-6 max-w-md mx-auto">
+              <h4 className="font-bold text-heading mb-4">Recommended Practice</h4>
+              <div className="space-y-2">
+                <Button variant="outline" className="w-full justify-start gap-2">🎙️ Pronunciation Practice</Button>
+                <Button variant="outline" className="w-full justify-start gap-2">🧠 Grammar Pattern Trainer</Button>
+                <Button variant="outline" className="w-full justify-start gap-2">💼 Try Advanced Interview</Button>
+              </div>
+           </div>
+           
+           <div className="pt-6">
+             <Button onClick={() => setSessionState("setup")} className="gap-2" size="lg">
+               <RefreshCw className="h-5 w-5" /> Practice Another Interview
+             </Button>
+           </div>
          </div>
       )}
     </div>

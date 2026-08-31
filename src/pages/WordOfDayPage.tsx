@@ -65,8 +65,7 @@ export default function WordOfDayPage() {
     setReviewed(false);
     setRating(0);
     try {
-      if (forceRefresh && dateStr === todayStr()) clearWordOfTheDayCache();
-      const entry = await getWordForDate(dateStr);
+      const entry = await getWordForDate(dateStr, forceRefresh);
       setWotd(entry);
     } catch (err: any) {
       setError(err.message || "Failed to load word.");

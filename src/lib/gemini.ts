@@ -1,7 +1,7 @@
 
 const newsCache: Record<string, string> = {};
 
-async function fetchWithRetry(url: string, options: RequestInit, retries = 3, backoff = 2000): Promise<Response> {
+export async function fetchWithRetry(url: string, options: RequestInit, retries = 4, backoff = 3000): Promise<Response> {
   try {
     const response = await fetch(url, options);
     
@@ -177,4 +177,77 @@ export async function expandNewsArticle(title: string, snippet: string) {
 
   console.error("Error in expandNewsArticle:", lastError);
   throw lastError;
+}
+
+export async function analyzePronunciationWithGemini(targetWord: string, transcript: string, expectedPhonetic?: string) {
+  const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+  const PRIMARY_MODEL = "gemini-3.6-flash";
+  const FALLBACK_MODEL = "gemini-3.5-flash";
+  const LAST_RESORT_MODEL = "gemini-flash-latest";
+
+  const defaultResponse = {
+    score: 60,
+    feedback: `We heard "${transcript}". Focus on matching the sounds of "${targetWord}".`,
+    problemAreas: []
+  };
+
+  if (!API_KEY) {
+    return defaultResponse;
+  }
+
+  const prompt = `You are a helpful, encouraging, and highly accurate English pronunciation coach.
+  The user was trying to pronounce the target word: "${targetWord}"
+  ${expectedPhonetic ? `The expected phonetic pronunciation is: ${expectedPhonetic}\n` : ''}
+  However, the speech recognition system heard them say: "${transcript}"
+  
+  Analyze the phonetic and structural differences between the target word and what was heard.
+  1. Determine a pronunciation score from 0 to 100 representing how close their speech was to the target word, ignoring simple normalization.
+  2. Provide a short, 1-2 sentence feedback. If they mispronounced it (e.g., missed a syllable, wrong stress, wrong vowel), tell them exactly which sounds to fix.
+  3. Identify 1-3 specific syllables or problem areas they missed (if any).
+  
+  Return ONLY a valid JSON object matching this schema:
+  {
+    "score": number, // 0-100
+    "feedback": string,
+    "problemAreas": string[]
+  }
+  `;
+
+  const getBody = () => JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { responseMimeType: "application/json" }
+  });
+
+  const sendRequest = async (model: string) => {
+    const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: getBody()
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to get pronunciation feedback");
+    }
+
+    const data = await response.json();
+    const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!resultText) {
+      throw new Error("Gemini API did not return any content.");
+    }
+
+    return JSON.parse(resultText.trim());
+  };
+
+  const models = [PRIMARY_MODEL, FALLBACK_MODEL, LAST_RESORT_MODEL];
+
+  for (const model of models) {
+    try {
+      return await sendRequest(model);
+    } catch (error: any) {
+      console.warn(`Model ${model} failed for analyzePronunciation. Trying next...`);
+    }
+  }
+
+  return defaultResponse;
 }

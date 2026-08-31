@@ -1,3 +1,5 @@
+import { fetchWithRetry } from "@/lib/gemini";
+
 export interface GrammarCorrection {
   type: string;
   pattern: string;
@@ -46,21 +48,38 @@ Return the result strictly as a JSON object with this schema:
 
 Rule: Return ONLY valid JSON. No markdown formatting or code blocks.`;
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${API_KEY}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" }
-    })
-  });
+  const models = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-flash-latest"];
+  let parsed: any = null;
+  let lastError = new Error("Failed to analyze grammar");
 
-  if (!response.ok) throw new Error("Failed to analyze grammar");
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("No content returned");
+  for (const model of models) {
+    try {
+      const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      }, 0);
 
-  const parsed = JSON.parse(text);
+      if (!response.ok) throw new Error(`Model ${model} returned ${response.status}`);
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error("No content returned");
+
+      const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsed = JSON.parse(cleanText);
+      break;
+    } catch (e: any) {
+      console.warn(`Model ${model} failed for grammar analysis: ${e.message}`);
+      lastError = e;
+    }
+  }
+
+  if (!parsed) {
+    throw lastError;
+  }
   return {
     score: parsed.grammarScore || 70,
     rating: parsed.grammarRating || "Good!",

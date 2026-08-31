@@ -116,8 +116,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return configured?.trim() || window.location.origin;
   };
 
-  const [user, setUser] = useState<UserData | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<UserData | null>(() => {
+    try {
+      const u = localStorage.getItem("wordwise_user");
+      return u ? JSON.parse(u) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("wordwise_token"));
 
   useEffect(() => {
     const t = localStorage.getItem("wordwise_token");

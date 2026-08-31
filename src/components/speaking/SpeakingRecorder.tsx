@@ -121,7 +121,7 @@ export default function SpeakingRecorder({ promptText, onRecordingComplete, maxD
         </div>
       )}
 
-      <div className="relative">
+      <div className="relative flex flex-col items-center">
         <button
           onClick={isRecording ? stopRecording : startRecording}
           className={`flex h-24 w-24 items-center justify-center rounded-full transition-all ${
@@ -132,6 +132,14 @@ export default function SpeakingRecorder({ promptText, onRecordingComplete, maxD
         >
           {isRecording ? <Square className="h-8 w-8" /> : <Mic className="h-10 w-10" />}
         </button>
+        {isRecording && (
+          <button 
+            onClick={stopRecording} 
+            className="mt-8 px-6 py-3 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg hover:bg-primary/90 transition-transform hover:scale-105 animate-in fade-in slide-in-from-bottom-4"
+          >
+            Submit Answer
+          </button>
+        )}
       </div>
 
       <div className="text-center">
