@@ -35,7 +35,7 @@ export default function InterviewTrainer() {
     }
   };
 
-  const handleAnswerComplete = async (transcript: string, duration: number) => {
+  const handleAnswerComplete = async (transcript: string, duration: number, audioBlob?: Blob) => {
     if (!transcript.trim()) {
       toast.error("No speech detected.");
       return;
@@ -43,7 +43,7 @@ export default function InterviewTrainer() {
 
     setEvaluating(true);
     try {
-      const feedback = await evaluateInterviewAnswer(questions[currentIdx].question, transcript, duration);
+      const feedback = await evaluateInterviewAnswer(questions[currentIdx].question, transcript, duration, audioBlob);
       setFeedbacks([...feedbacks, feedback]);
       setShowFeedbackModal(true);
     } catch (err: any) {

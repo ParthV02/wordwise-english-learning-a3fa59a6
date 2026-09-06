@@ -167,8 +167,8 @@ export default function PronunciationPage() {
     setFluencyPrompt(newTopic);
   };
 
-  const handleFluencyComplete = async (transcript: string, durationSeconds: number) => {
-    if (!transcript.trim()) {
+  const handleFluencyComplete = async (transcript: string, durationSeconds: number, audioBlob?: Blob) => {
+    if (!audioBlob && !transcript.trim()) {
       toast.error("No speech detected.");
       setFluencyState("idle");
       return;

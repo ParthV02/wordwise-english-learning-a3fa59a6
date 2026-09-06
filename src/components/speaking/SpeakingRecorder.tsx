@@ -4,7 +4,7 @@ import { toast } from "sonner";
 
 interface SpeakingRecorderProps {
   promptText?: string;
-  onRecordingComplete: (transcript: string, durationSeconds: number) => void;
+  onRecordingComplete: (transcript: string, durationSeconds: number, audioBlob?: Blob) => void;
   maxDurationSeconds?: number;
   hideTopic?: boolean;
 }
@@ -16,6 +16,10 @@ export default function SpeakingRecorder({ promptText, onRecordingComplete, maxD
   const recognitionRef = useRef<any>(null);
   const timerRef = useRef<number | null>(null);
   const transcriptRef = useRef("");
+  
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const finalAudioBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -51,17 +55,41 @@ export default function SpeakingRecorder({ promptText, onRecordingComplete, maxD
     };
   }, []);
 
-  const startRecording = () => {
+  const startRecording = async () => {
     if (!recognitionRef.current) return;
     setTranscript("");
     transcriptRef.current = "";
+    audioChunksRef.current = [];
+    finalAudioBlobRef.current = null;
     setTimeRemaining(maxDurationSeconds);
     setIsRecording(true);
     
     try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        finalAudioBlobRef.current = audioBlob;
+        
+        // Stop all tracks to release microphone
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      mediaRecorder.start();
       recognitionRef.current.start();
     } catch (e) {
       console.error(e);
+      toast.error("Could not access microphone.");
+      setIsRecording(false);
+      return;
     }
 
     timerRef.current = window.setInterval(() => {
@@ -84,6 +112,9 @@ export default function SpeakingRecorder({ promptText, onRecordingComplete, maxD
       
       try {
         recognitionRef.current?.stop();
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
       } catch (e) {
         console.error(e);
       }
@@ -105,7 +136,7 @@ export default function SpeakingRecorder({ promptText, onRecordingComplete, maxD
         toast.error("Recording too short. Please try to speak a bit more.");
       } else {
         setTimeout(() => {
-          onRecordingComplete(transcriptRef.current, duration);
+          onRecordingComplete(transcriptRef.current, duration, finalAudioBlobRef.current || undefined);
         }, 800); // Give a brief moment for final recognition results to arrive
       }
     }

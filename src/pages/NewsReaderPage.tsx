@@ -204,10 +204,11 @@ export default function NewsReaderPage() {
                 <SpeakingRecorder 
                   hideTopic
                   maxDurationSeconds={300} // Up to 5 mins for reading
-                  onRecordingComplete={async (transcript, duration) => {
+                  onRecordingComplete={async (transcript, duration, audioBlob) => {
                     setAnalyzingReading(true);
                     try {
-                      const res = await analyzeReading(displayContent, transcript, duration);
+                      if (!audioBlob) throw new Error("No audio recorded");
+                      const res = await analyzeReading(displayContent, transcript, duration, audioBlob);
                       
                       // Update User Data Reading Metrics
                       if (user) {
